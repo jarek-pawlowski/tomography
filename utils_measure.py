@@ -40,7 +40,7 @@ class Tomography:
     # stuff for tomography (PHYSICAL REVIEW A, VOLUME 64, 052312)
     def __init__(self, no_qubits, single_qubit_projectors): 
         self.no_qubits = no_qubits
-        self.rho_dim = np.power(2,self.no_qubits)
+        self.rho_dim = np.power(2, self.no_qubits)
         self.tomo_dim = self.rho_dim**2
         # create two qubit projection basis 
         projection_basis = []
@@ -66,26 +66,29 @@ class Tomography:
 
 
 class States:
-    def __init__(self): 
-        # Kwiat convention (PHYSICAL REVIEW A 64 052312)
-        self.H = np.array([[1],[0]])
-        self.V = np.array([[0],[1]])
-        self.L = np.array([[1],[1j]])/np.sqrt(2)
-        self.R = np.array([[1],[-1j]])/np.sqrt(2)
-        self.D = np.array([[1],[1]])/np.sqrt(2)
-        # convention leading to standard Pauli basis
-        #self.R = np.array([[1],[0]])
-        #self.L = np.array([[0],[1]])
-        #self.H = np.array([[1],[1]])/np.sqrt(2)
-        #self.V = np.array([[1],[-1]])/np.sqrt(2)*1j
-        #self.D = np.array([[1+1j],[1-1j]])/2
-
+    def __init__(self, Standad_Pauli_Basis): 
+        if Standad_Pauli_Basis:
+            # convention leading to standard Pauli basis
+            self.R = np.array([[1],[0]])
+            self.L = np.array([[0],[1]])
+            self.H = np.array([[1],[1]])/np.sqrt(2)
+            self.V = np.array([[1],[-1]])/np.sqrt(2)*1j
+            self.D = np.array([[1+1j],[1-1j]])/2
+        else:
+            # Kwiat convention (PHYSICAL REVIEW A 64 052312)
+            self.H = np.array([[1],[0]])
+            self.V = np.array([[0],[1]])
+            self.L = np.array([[1],[1j]])/np.sqrt(2)
+            self.R = np.array([[1],[-1j]])/np.sqrt(2)
+            self.D = np.array([[1],[1]])/np.sqrt(2)
+        
     
 class Basis:
     def __init__(self, basis):
         self.basis = basis
             
-states = States()
+            
+states = States(Standad_Pauli_Basis=False)
 
 Kwiat = Basis([tensordot(states.H, states.H, conj_tr=(False,True)), 
                tensordot(states.V, states.V, conj_tr=(False,True)),
