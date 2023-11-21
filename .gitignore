@@ -2,6 +2,5 @@ test_states/
 /models
 /logs
 /plots
-__pycache__
 /data
 __pycache__

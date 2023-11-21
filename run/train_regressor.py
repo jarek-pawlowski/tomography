@@ -49,7 +49,6 @@ def main():
             best_test_loss = test_metrics['test_loss']
             model.save(model_save_path)
         metrics = {**train_metrics, **test_metrics}
-
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, epoch=epoch)
 
