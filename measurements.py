@@ -38,3 +38,5 @@ rho_in[3,3] = 0.5
 m_all = np.array([[measurement.measure(rho_in.reshape((2,2,2,2)), [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
 rho_rec = tomography.reconstruct(m_all)
 print(np.round(rho_rec, 2))
+
+breakpoint()
