@@ -26,7 +26,7 @@ model.load(model_path)
 
 rmse_loss = lambda x, y: torch.sqrt(torch.functional.F.mse_loss(x, y))
 mse_loss = nn.MSELoss()
-accuracy = lambda x, y: regressor_accuracy(x, y, input_threshold=0.01, target_threshold=0.01)
+accuracy = lambda x, y: regressor_accuracy(x, y, input_threshold=0.05, target_threshold=0.001)
 criterions = {
     'test_rmse_loss': rmse_loss,
     'test_mse_loss': mse_loss,
