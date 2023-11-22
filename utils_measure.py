@@ -66,9 +66,9 @@ class Tomography:
 
 
 class States:
-    def __init__(self, Standad_Pauli_Basis): 
-        if Standad_Pauli_Basis:
-            # convention leading to standard Pauli basis
+    def __init__(self, Kwiat_Pauli_Basis): 
+        if Kwiat_Pauli_Basis:
+            # convention leading to standard Pauli matrices in (2.3) in PHYSICAL REVIEW A 64 052312
             self.R = np.array([[1],[0]])
             self.L = np.array([[0],[1]])
             self.H = np.array([[1],[1]])/np.sqrt(2)
@@ -88,16 +88,15 @@ class Basis:
         self.basis = basis
             
             
-states = States(Standad_Pauli_Basis=False)
+states = States(Kwiat_Pauli_Basis=False)
 
 Kwiat = Basis([tensordot(states.H, states.H, conj_tr=(False,True)), 
                tensordot(states.V, states.V, conj_tr=(False,True)),
                tensordot(states.D, states.D, conj_tr=(False,True)),
                tensordot(states.R, states.R, conj_tr=(False,True))])
-Pauli = Basis([tensordot(states.R, states.R, conj_tr=(False,True)) + tensordot(states.L, states.L, conj_tr=(False,True)), 
-               tensordot(states.R, states.L, conj_tr=(False,True)) + tensordot(states.L, states.R, conj_tr=(False,True)),
-               (tensordot(states.L, states.R, conj_tr=(False,True)) - tensordot(states.R, states.L, conj_tr=(False,True)))*1.j,
-               tensordot(states.R, states.R, conj_tr=(False,True)) - tensordot(states.L, states.L, conj_tr=(False,True))])
+Pauli = Basis([tensordot(states.D, states.D, conj_tr=(False,True)),
+               tensordot(states.L, states.L, conj_tr=(False,True)),
+               tensordot(states.H, states.H, conj_tr=(False,True))])
 
 Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
