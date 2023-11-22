@@ -10,15 +10,16 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.model import Regressor
 from src.torch_utils import train, test
-from src.logging import log_metrics_to_file
+from src.logging import log_metrics_to_file, plot_metrics_from_file
 
 
 def main():
     # load data
+    batch_size = 512
     train_dataset = MeasurementDataset(root_path='./data/train/')
     test_dataset = MeasurementDataset(root_path='./data/val/')
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
     model_save_path = './models/regressor.pt'
@@ -43,7 +44,7 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train(model, device, train_loader, optimizer, epoch, criterion=criterion)
+        train_metrics = train(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10)
         test_metrics = test(model, device, test_loader, criterion)
         if test_metrics['test_loss'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']
@@ -51,6 +52,7 @@ def main():
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, epoch=epoch)
+    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/regressor_loss.png')
 
 
 if __name__ == '__main__':
