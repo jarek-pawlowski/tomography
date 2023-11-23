@@ -15,7 +15,7 @@ def trace(a):
     indices_to_sum = np.tile(np.indices([2]*dim).reshape(dim,-1).T, 2)
     return np.sum([a[tuple(idx)] for idx in indices_to_sum])
 
-Pauli0 = np.array([[1,0],[0,1]])
+Pauli0 = np.array([[1,0],[0,1]]) #identity matrix
 PauliX = np.array([[0,1],[1,0]])
 PauliY = np.array([[0,-1j],[1j,0]])
 PauliZ = np.array([[1,0],[0,-1]])
@@ -122,6 +122,7 @@ class Measurement:
         
     def measure_single_pure(self, psi, qubit_index, basis_index, return_state=False):
          # measure single qubit in pure state using given operator 
+         # basis index - in which basis measure 
         Ppsi = psi.copy()
         Ppsi = tensordot(self.basis[basis_index], Ppsi, indices=(1,qubit_index), moveaxis=(0,qubit_index))
         to_contract = tuple(np.arange(self.no_qubits))
@@ -157,4 +158,10 @@ class Measurement:
             return prob, Ppsi/np.sqrt(prob)
         else:
             return prob
+        
+        
+        
+# 4 qubit 
+# measure_single_pure 
+# X 1 Y 0 Z 1 Y 1 (1 pomiar) 
         
