@@ -1,6 +1,8 @@
 from tqdm import tqdm
 import typing as t
+import random
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -39,7 +41,7 @@ def test(
     model: nn.Module,
     device: torch.device, 
     test_loader: DataLoader,
-    criterions: t.Dict[str, t.Callable]
+    criterions: t.Dict[str, t.Callable],
 ) -> t.Dict[str, t.List[float]]:
     
     model.eval()
@@ -58,6 +60,37 @@ def test(
     return metrics
 
 
+def test_varying_input(
+    model: nn.Module,
+    device: torch.device, 
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    varying_input_idx: t.Optional[t.List[int]],
+    max_variance: float = 1.,
+    step: float = 0.1,
+) -> t.Dict[str, t.List[float]]:
+    
+    model.eval()
+    model.to(device)
+    
+    metrics = {}
+    for variance in np.arange(0, max_variance, step):
+        metrics[variance] = {name: 0 for name in criterions.keys()}
+        with torch.no_grad():
+            for data, target in tqdm(test_loader, desc=f' Variance: {variance}'):
+                # multiply variance by -1 with 50% probability
+                variance_val = variance * (-1)**random.randint(0, 1)
+                data, target = data.to(device), target.to(device)
+                data[:, torch.tensor(varying_input_idx)] = data[:, torch.tensor(varying_input_idx)] + variance_val
+                output = model(data)
+                for name, criterion in criterions.items():
+                    metrics[variance][name] += criterion(output, target).item()
+        for name in metrics[variance].keys():
+            metrics[variance][name] /= len(test_loader)
+            print(f'{name} - variance {variance}: {metrics[variance][name]:.4f}')
+    return metrics
+
+
 def regressor_accuracy(
     input: torch.Tensor,
     target: torch.Tensor,
@@ -67,3 +100,15 @@ def regressor_accuracy(
     prediction = (input > input_threshold).float()
     target = (target > target_threshold).float()
     return (prediction == target).float().mean()
+
+
+def reduced_input_criterion(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    input_drop_idx: t.List[int],
+    criterion: t.Callable
+) -> torch.Tensor:
+    input = torch.cat([input[:, :input_drop_idx[0]], input[:, input_drop_idx[0] + 1:]], dim=1)
+    for idx in input_drop_idx[1:]:
+        input = torch.cat([input[:, :idx], input[:, idx + 1:]], dim=1)
+    return criterion(input, target)

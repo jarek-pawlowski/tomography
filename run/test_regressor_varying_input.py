@@ -6,20 +6,20 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import Regressor
-from src.torch_utils import test, regressor_accuracy
+from src.torch_utils import test_varying_input, regressor_accuracy
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
 batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-model_path = './models/regressor_input_drop_20.pt'
+model_path = './models/regressor.pt'
 model_params = {
     'input_dim': 16,
     'output_dim': 1,
     'layers': 2,
     'hidden_size': 128,
-    'input_dropout': 0.2
+    'input_dropout': 0.0
 }
 model = Regressor(**model_params)
 model.load(model_path)
@@ -34,5 +34,11 @@ criterions = {
 }
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-test_metrics = test(model, device, test_loader, criterions)
-log_metrics_to_file(test_metrics, './logs/regressor_input_drop_20_test.log', write_mode='w')
+
+for i in range(0, model_params['input_dim']):
+    print('Measurement input', i)
+    test_metrics = test_varying_input(model, device, test_loader, criterions, varying_input_idx=[i], max_variance=1., step=0.05)
+    for variance, metrics in test_metrics.items():
+        write_mode = 'w' if variance == 0 else 'a'
+        log_metrics_to_file(metrics, f'./logs/regressor_test_varying_measurement_{i}.log', write_mode=write_mode, xaxis=variance, xaxis_name='variance')
+    plot_metrics_from_file(f'./logs/regressor_test_varying_measurement_{i}.log', title=f'Metrics for measurement {i}', save_path=f'./plots/regressor_test_varying_measurement_{i}.png', xaxis='variance')
