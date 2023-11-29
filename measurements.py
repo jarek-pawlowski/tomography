@@ -4,7 +4,6 @@ import numpy as np
 
 measurement = utils.Measurement(utils.Pauli, 2)
 
-"""
 rho_in = np.ones((2,2,2,2))/4.
 print(rho_in)
 for i in [0,1,2,3]:
@@ -13,7 +12,7 @@ for i in [0,1,2,3]:
         print(i,j,round(m,2))
 m_all = np.array([[measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
 print(m_all)
-"""
+
 
 indices = [0,1,2,3]
 print("the same for pure state:")        
