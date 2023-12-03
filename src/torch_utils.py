@@ -78,13 +78,15 @@ def test_varying_input(
         metrics[variance] = {name: 0 for name in criterions.keys()}
         with torch.no_grad():
             for data, target in tqdm(test_loader, desc=f' Variance: {variance}'):
-                # multiply variance by -1 with 50% probability
-                variance_val = variance * (-1)**random.randint(0, 1)
                 data, target = data.to(device), target.to(device)
-                data[:, torch.tensor(varying_input_idx)] = data[:, torch.tensor(varying_input_idx)] + variance_val
+                data_min = torch.maximum(data[:, torch.tensor(varying_input_idx)] - variance, torch.zeros_like(data[:, torch.tensor(varying_input_idx)]))
+                data_max = torch.minimum(data[:, torch.tensor(varying_input_idx)] + variance, torch.ones_like(data[:, torch.tensor(varying_input_idx)]))
+                interval = data_max - data_min + 1e-6
+                varied_data = torch.rand_like(interval) * interval + data_min
+                data[:, torch.tensor(varying_input_idx)] = varied_data
                 output = model(data)
                 for name, criterion in criterions.items():
-                    metrics[variance][name] += criterion(output, target).item()
+                    metrics[variance][name] += (criterion(output, target) * interval).sum() / interval.sum()
         for name in metrics[variance].keys():
             metrics[variance][name] /= len(test_loader)
             print(f'{name} - variance {variance}: {metrics[variance][name]:.4f}')
@@ -95,11 +97,15 @@ def regressor_accuracy(
     input: torch.Tensor,
     target: torch.Tensor,
     input_threshold: float = 0.5,
-    target_threshold: float = 0.5
+    target_threshold: float = 0.5,
+    reduction: str = 'mean'
 ) -> torch.Tensor:
     prediction = (input > input_threshold).float()
     target = (target > target_threshold).float()
-    return (prediction == target).float().mean()
+    accuracy = (prediction == target).float()
+    if reduction == 'mean':
+        return accuracy.mean()
+    return accuracy
 
 
 def reduced_input_criterion(

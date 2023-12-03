@@ -39,3 +39,4 @@ def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
     plt.show()
+    plt.close()

@@ -22,20 +22,20 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_save_path = './models/regressor_input_drop_20.pt'
+    model_save_path = './models/regressor_10_fcl.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
         'input_dim': 16,
         'output_dim': 1,
-        'layers': 2,
+        'layers': 10,
         'hidden_size': 128,
-        'input_dropout': 0.2
+        'input_dropout': 0.
     }
     model = Regressor(**model_params)
 
     # train & test model
-    log_path = './logs/regressor_drop_20.log'
+    log_path = './logs/regressor_10_fcl.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -55,7 +55,7 @@ def main():
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/regressor_loss.png')
+    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/regressor_10_fcl_loss.png')
 
 
 if __name__ == '__main__':
