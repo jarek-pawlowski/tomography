@@ -2,8 +2,8 @@ import numpy as np
 from numpy.linalg import inv
 
 def tensordot(a, b, indices=(1,0), moveaxis=None, conj_tr=(False,False)):
-    a1 = np.conjugate(a.T) if conj_tr[0] else a
-    b1 = np.conjugate(b.T) if conj_tr[1] else b
+    a1 = np.conjugate(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
+    b1 = np.conjugate(b.T) if conj_tr[1] else b  # warning: transposing reverses tensor indices
     result = np.tensordot(a1, b1, indices)
     if moveaxis is not None:
         result = np.moveaxis(result, *moveaxis)
@@ -19,6 +19,8 @@ Pauli0 = np.array([[1,0],[0,1]])
 PauliX = np.array([[0,1],[1,0]])
 PauliY = np.array([[0,-1j],[1j,0]])
 PauliZ = np.array([[1,0],[0,-1]])
+Pauli_vector = [PauliX, PauliY, PauliZ]
+
 G1 = np.kron(Pauli0,PauliX)/2
 G2 = np.kron(Pauli0,PauliY)/2
 G3 = np.kron(Pauli0,PauliZ)/2
@@ -124,9 +126,10 @@ class Measurement:
         Ppsi = psi.copy()
         Ppsi = tensordot(self.basis[basis_index], Ppsi, indices=(1,qubit_index), moveaxis=(0,qubit_index))
         to_contract = tuple(np.arange(self.no_qubits))
-        prob = tensordot(psi, Ppsi, indices=(to_contract, to_contract), conj_tr=(True,False)).item().real
+        prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+        # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
-            return prob, Ppsi/np.sqrt(prob)
+            return prob.real, Ppsi/np.sqrt(prob)
         else:
             return prob
 
@@ -151,7 +154,8 @@ class Measurement:
         for i, bi in enumerate(basis_indices):
             Ppsi = tensordot(self.basis[bi], Ppsi, indices=(1,i), moveaxis=(0,i))
         to_contract = tuple(np.arange(self.no_qubits))
-        prob = tensordot(psi, Ppsi, indices=(to_contract, to_contract), conj_tr=(True,False)).item().real
+        prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+        # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
             return prob, Ppsi/np.sqrt(prob)
         else:
