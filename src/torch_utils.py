@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
-
+from src.utils_measure import Kwiat
 
 def train(
     model: nn.Module,
@@ -28,6 +28,39 @@ def train(
         optimizer.zero_grad()
         output = model(data)
         loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        metrics['train_loss'] += loss.item()
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'loss': loss.item()})
+    metrics['train_loss'] /= len(train_loader)
+    return metrics
+
+
+def train_measurement_predictor(
+    model: nn.Module,
+    device: torch.device, 
+    train_loader: DataLoader, 
+    optimizer: Optimizer, 
+    epoch: int, 
+    log_interval: int = 100, 
+    criterion: t.Callable = nn.MSELoss()
+) -> t.Dict[str, t.List[float]]:
+    
+    model.train()
+    model.to(device)
+    metrics = {'train_loss': 0}
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    for batch_idx, (rho, measurement, _) in pbar:
+        rho, measurement = rho.to(device), measurement.to(device)
+        optimizer.zero_grad()
+        basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
+        basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
+        measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
+        predicted_rhos, predicted_measurements = model(measurement_with_basis, rho)
+        loss = torch.zeros(1).to(device)
+        for i in range(predicted_rhos.shape[1]):
+            loss += criterion(predicted_rhos[:, i], rho)
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
@@ -60,6 +93,36 @@ def test(
     return metrics
 
 
+def test_measurement_predictor(
+    model: nn.Module,
+    device: torch.device,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    max_num_measurements: int = 16,
+) -> t.Dict[str, t.List[float]]:
+        
+    model.eval()
+    model.to(device)
+    
+    metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
+            basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
+            measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
+            predicted_rhos, predicted_measurements = model(measurement_with_basis, rho)        
+            for name, criterion in criterions.items():
+                for i in range(predicted_rhos.shape[1]):
+                    metrics[name][f'measurement {i}'] += criterion(predicted_rhos[:, i], rho).item()
+    for name in metrics.keys():
+        for i in range(max_num_measurements):
+            metrics[name][f'measurement {i}'] /= len(test_loader)
+            print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
+    return metrics
+
+
+
 def test_varying_input(
     model: nn.Module,
     device: torch.device, 
@@ -86,7 +149,7 @@ def test_varying_input(
                 data[:, torch.tensor(varying_input_idx)] = varied_data
                 output = model(data)
                 for name, criterion in criterions.items():
-                    metrics[variance][name] += (criterion(output, target) * interval).sum() / interval.sum()
+                    metrics[variance][name] += ((criterion(output, target) * interval).sum() / interval.sum()).item()
         for name in metrics[variance].keys():
             metrics[variance][name] /= len(test_loader)
             print(f'{name} - variance {variance}: {metrics[variance][name]:.4f}')

@@ -53,13 +53,15 @@ class DensityMatrixDataset(Dataset):
     
 
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str) -> None:
+    def __init__(self, root_path: str, return_density_matrix: bool = False) -> None:
         super().__init__(root_path)
         self.measurement = Measurement(Kwiat, 2)
+        self.rerurn_density_matrix = return_density_matrix
 
     def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
         filename = self.read_filename(idx)
         matrix = self.read_matrix(filename)
+        rho = self.convert_numpy_matrix_to_tensor(matrix)
 
         # reshape density matrix from (4, 4) to (2, 2, 2, 2)
         matrix = matrix.reshape((2, 2, 2, 2))
@@ -67,7 +69,10 @@ class MeasurementDataset(DensityMatrixDataset):
         tensor = torch.from_numpy(measurements).float()
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)
-        return (tensor, label)
+
+        if not self.rerurn_density_matrix:
+            return (tensor, label)
+        return (rho, tensor, label)
     
     def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
         m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
