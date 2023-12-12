@@ -13,8 +13,8 @@ batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path = './logs/regressor_test_varying_measurement_clipped_{}.log'
-plot_path = './plots/regressor_test_varying_measurement_clipped_{}.png'
+results_path = './logs/regressor_varying_measurements/regressor_test_varying_measurement_clipped_{}.log'
+plot_path = './plots/regressor_varying_measurements/regressor_test_varying_measurement_clipped_{}.png'
 
 model_path = './models/regressor.pt'
 model_params = {
@@ -43,5 +43,5 @@ for i in range(0, model_params['input_dim']):
     test_metrics = test_varying_input(model, device, test_loader, criterions, varying_input_idx=[i], max_variance=1., step=0.05)
     for variance, metrics in test_metrics.items():
         write_mode = 'w' if variance == 0 else 'a'
-        log_metrics_to_file(metrics, results_path = results_path.format(i), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
+        log_metrics_to_file(metrics, results_path.format(i), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
     plot_metrics_from_file(results_path.format(i), title=f'Metrics for measurement {i}', save_path=plot_path.format(i), xaxis='variance')
