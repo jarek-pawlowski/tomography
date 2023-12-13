@@ -61,10 +61,14 @@ class Tomography:
                 B[nu,mu] = tensordot(self.projection_basis[nu], tensordot(self.Gamma[mu], self.projection_basis[nu]), conj_tr=(True,False)).item()
         self.B_inv = inv(B) 
         
-    def reconstruct(self, measurements):
+    def reconstruct(self, measurements, enforce_positiv_sem=False):
         # calculate state reconstruction (Eq. 3.13 in PHYSICAL REVIEW A, VOLUME 64, 052312)
         r = np.matmul(self.B_inv, measurements)
-        return tensordot(self.Gamma, r, indices=(0,0))
+        r = tensordot(self.Gamma, r, indices=(0,0))
+        if enforce_positiv_sem:
+            eigs = np.amin(np.linalg.eigvalsh(r))
+            if eigs < 0.: r -= np.eye(self.rho_dim)*eigs            
+        return r
 
 
 class States:
