@@ -40,3 +40,26 @@ def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional
         plt.savefig(save_path)
     plt.show()
     plt.close()
+
+
+def plot_metrics_from_files(path_common_prefix: str, range_: t.Tuple[int, int], title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', specified_metric: t.Optional[str] = None) -> None:
+    for i in range(*range_):
+        log_path = f'{path_common_prefix}{i}.log'
+        metrics = load_metrics_from_file(log_path)
+        epochs = metrics.pop(xaxis)
+        if specified_metric is not None:
+            # set color according to i and color palette
+            cmap = plt.get_cmap('tab20')
+            color = cmap(i)
+            plt.plot(epochs, metrics[specified_metric], label=f'{specified_metric} {i}', color=color)            
+        else:
+            for metric_name, metric_value in metrics.items():
+                plt.plot(epochs, metric_value, label=f'{metric_name} {i}')
+    plt.title(title)
+    plt.xlabel(xaxis)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, bbox_inches='tight')
+    plt.show()
+    plt.close()

@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
+from qiskit.quantum_info import DensityMatrix, state_fidelity
+
 from src.utils_measure import Kwiat
 
 def train(
@@ -181,3 +183,38 @@ def reduced_input_criterion(
     for idx in input_drop_idx[1:]:
         input = torch.cat([input[:, :idx], input[:, idx + 1:]], dim=1)
     return criterion(input, target)
+
+
+def torch_bures_distance(
+    rho_input: torch.Tensor,
+    rho_target: torch.Tensor,
+    reduction: str = 'mean'
+) -> torch.Tensor:
+    rho_input_np = torch.complex(rho_input[..., 0, :, :], rho_input[..., 1, :, :]).to(torch.cdouble)
+    rho_target_np = torch.complex(rho_target[..., 0, :, :], rho_target[..., 1, :, :]).to(torch.cdouble)
+
+    bures_distances = []
+    for rho_in, rho_t in zip(rho_input_np, rho_target_np):
+        fidelity = torch_fidelity(rho_in, rho_t)
+        bures_distance = 2 * (1 - torch.sqrt(fidelity))
+        bures_distances.append(bures_distance.unsqueeze(0))
+    bures_distances = torch.stack(bures_distances)
+    if reduction == 'mean':
+        return bures_distances.mean()
+    return bures_distances
+
+
+def torch_fidelity(
+    rho1 : torch.Tensor,
+    rho2: torch.Tensor
+):
+    unitary1, singular_values, unitary2 = torch.linalg.svd(rho1)
+    diag_func_singular = torch.diag(torch.sqrt(singular_values)).to(torch.cdouble)
+    s1sqrt =  unitary1.matmul(diag_func_singular).matmul(unitary2)   
+
+    unitary1, singular_values, unitary2 = torch.linalg.svd(rho2)
+    diag_func_singular = torch.diag(torch.sqrt(singular_values)).to(torch.cdouble)
+    s2sqrt =  unitary1.matmul(diag_func_singular).matmul(unitary2)   
+
+    fid = torch.linalg.norm(s1sqrt.matmul(s2sqrt), ord="nuc") ** 2
+    return fid.to(torch.double)

@@ -7,13 +7,14 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.model import Regressor
 from src.torch_utils import test_varying_input, regressor_accuracy
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path = './logs/regressor_varying_measurements/regressor_test_varying_measurement_clipped_{}.log'
+results_path_prefix = './logs/regressor_varying_measurements/regressor_test_varying_measurement_clipped_'
+results_path = '{}{}.log'
 plot_path = './plots/regressor_varying_measurements/regressor_test_varying_measurement_clipped_{}.png'
 
 model_path = './models/regressor.pt'
@@ -43,5 +44,8 @@ for i in range(0, model_params['input_dim']):
     test_metrics = test_varying_input(model, device, test_loader, criterions, varying_input_idx=[i], max_variance=1., step=0.05)
     for variance, metrics in test_metrics.items():
         write_mode = 'w' if variance == 0 else 'a'
-        log_metrics_to_file(metrics, results_path.format(i), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
-    plot_metrics_from_file(results_path.format(i), title=f'Metrics for measurement {i}', save_path=plot_path.format(i), xaxis='variance')
+        log_metrics_to_file(metrics, results_path.format(results_path_prefix, i), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
+    plot_metrics_from_file(results_path.format(results_path_prefix, i), title=f'Metrics for measurement {i}', save_path=plot_path.format(i), xaxis='variance')
+
+plot_metrics_from_files(results_path_prefix, (0, model_params['input_dim']), title='RMSE loss for varying measurements', save_path=plot_path.format('rmse'), xaxis='variance', specified_metric='test_rmse_loss')
+plot_metrics_from_files(results_path_prefix, (0, model_params['input_dim']), title='Accuracy for varying measurements', save_path=plot_path.format('acc'), xaxis='variance', specified_metric='test_accuracy')

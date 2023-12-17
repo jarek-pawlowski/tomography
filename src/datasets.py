@@ -53,10 +53,12 @@ class DensityMatrixDataset(Dataset):
     
 
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str, return_density_matrix: bool = False) -> None:
+    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None) -> None:
         super().__init__(root_path)
         self.measurement = Measurement(Kwiat, 2)
-        self.rerurn_density_matrix = return_density_matrix
+        self.return_density_matrix = return_density_matrix
+        if data_limit is not None:
+            self.dict = self.dict[:data_limit]
 
     def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
         filename = self.read_filename(idx)
@@ -70,7 +72,7 @@ class MeasurementDataset(DensityMatrixDataset):
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)
 
-        if not self.rerurn_density_matrix:
+        if not self.return_density_matrix:
             return (tensor, label)
         return (rho, tensor, label)
     
