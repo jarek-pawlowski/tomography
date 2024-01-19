@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor
+from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor
 from src.torch_utils import train_measurement_predictor, test_measurement_predictor
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
@@ -22,17 +22,17 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'smp_measure_basis'
+    model_name = 'full_lstm_measure_basis'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
         'num_qubits': 2,
         'layers': 6,
-        'hidden_size': 64,
+        'hidden_size': 128,
         'max_num_measurements': 16
     }
-    model = SequentialMeasurementPredictor(**model_params)
+    model = LSTMMeasurementPredictor(**model_params)
 
     # train & test model
     log_path = f'./logs/{model_name}.log'

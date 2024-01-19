@@ -8,7 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor
+from src.model import SequentialMeasurementPredictor, LSTMMeasurementPredictor
 from src.torch_utils import train_measurement_predictor, test_measurement_predictor, torch_bures_distance
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
@@ -20,16 +20,17 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'smp_measure_basis'
+    model_name = 'full_lstm_measure_basis'
     model_save_path = f'./models/{model_name}.pt'
     
     model_params = {
         'num_qubits': 2,
         'layers': 6,
-        'hidden_size': 64,
+        'hidden_size': 128,
         'max_num_measurements': 16
     }
-    model = SequentialMeasurementPredictor(**model_params)
+    # model = SequentialMeasurementPredictor(**model_params)
+    model = LSTMMeasurementPredictor(**model_params)
     model.load(model_save_path)
 
     # train & test model
@@ -40,7 +41,7 @@ def main():
         'test_loss': criterion,
         'bures_distance': bures_distance
     }
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
 
     test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
     for i in range(model_params['max_num_measurements']):

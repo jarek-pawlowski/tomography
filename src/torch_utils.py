@@ -59,7 +59,7 @@ def train_measurement_predictor(
         basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
         basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
         measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-        predicted_rhos, predicted_measurements = model(measurement_with_basis, rho)
+        predicted_rhos = model(measurement_with_basis, rho)
         loss = torch.zeros(1).to(device)
         for i in range(predicted_rhos.shape[1]):
             loss += criterion(predicted_rhos[:, i], rho)
@@ -113,7 +113,7 @@ def test_measurement_predictor(
             basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
             basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
             measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-            predicted_rhos, predicted_measurements = model(measurement_with_basis, rho)        
+            predicted_rhos = model(measurement_with_basis, rho)        
             for name, criterion in criterions.items():
                 for i in range(predicted_rhos.shape[1]):
                     metrics[name][f'measurement {i}'] += criterion(predicted_rhos[:, i], rho).item()
@@ -122,7 +122,6 @@ def test_measurement_predictor(
             metrics[name][f'measurement {i}'] /= len(test_loader)
             print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
     return metrics
-
 
 
 def test_varying_input(

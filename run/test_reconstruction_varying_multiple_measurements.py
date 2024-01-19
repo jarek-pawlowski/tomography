@@ -45,4 +45,4 @@ for i in range(1, num_measurements + 1):
             avg_metrics[metric_name] += metric_value / num_repetitions
     write_mode = 'w' if i == 1 else 'a'
     log_metrics_to_file(avg_metrics, results_path, write_mode=write_mode, xaxis=i, xaxis_name='num measurements')
-plot_metrics_from_file(results_path, title=f'Metrics for topology reconstruction', save_path=plot_path, xaxis='num measurements')
+plot_metrics_from_file(results_path, title=f'Metrics for tomography reconstruction', save_path=plot_path, xaxis='num measurements')

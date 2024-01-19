@@ -88,11 +88,11 @@ def test_concurrence_measurement_noise_for_variance(
                 predictions.append(conc)
             predictions = torch.tensor(predictions).unsqueeze(-1)
 
-            weights = interval.mean(dim=-1) # averaging interval for all disturbed measurements
-            for name, criterion in criterions.items():
-                interval[predictions == -1] = 0
+            interval[predictions.squeeze() == -1] = 0
 
-                variance_metrics[name] += ((criterion(predictions, target) * weights).sum() / weights.sum()).item() / len(test_loader)
+            for name, criterion in criterions.items():
+
+                variance_metrics[name] += ((criterion(predictions, target) * interval).sum() / interval.sum()).item() / len(test_loader)
 
     print(f'Percentage of skipped samples (due to incorrect reconstruction): {num_skipped/len(test_loader.dataset)*100:.2f}')
 
