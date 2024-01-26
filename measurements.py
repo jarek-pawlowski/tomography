@@ -3,6 +3,7 @@ import utils_measure as utils
 import numpy as np
 
 measurement = utils.Measurement(utils.Kwiat, 2)
+breakpoint()
 
 rho_in = np.ones((2,2,2,2))/4.
 for i in [0,1,2,3]:

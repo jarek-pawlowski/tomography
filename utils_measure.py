@@ -1,6 +1,8 @@
 import numpy as np
 from numpy.linalg import inv
 
+import QuantumTomography as qLib  # pip install Quantum-Tomography
+
 def tensordot(a, b, indices=(1,0), moveaxis=None, conj_tr=(False,False)):
     a1 = np.conjugate(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
     b1 = np.conjugate(b.T) if conj_tr[1] else b  # warning: transposing reverses tensor indices
@@ -109,7 +111,6 @@ Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
 class Measurement:
     # nice compendium: https://arxiv.org/pdf/2201.07968.pdf
-
     def __init__(self, basis, no_qubits):
         self.basis = basis.basis
         self.no_qubits = no_qubits
@@ -164,4 +165,22 @@ class Measurement:
             return prob, Ppsi/np.sqrt(prob)
         else:
             return prob
+
+
+basis_for_Kwiat_code = np.array([np.concatenate((Kwiat_projectors.basis[i].flatten(), Kwiat_projectors.basis[j].flatten())) for i in [0,1,2,3] for j in [0,1,2,3]])        
         
+class Kwiat_library:
+    # compendium: https://research.physics.illinois.edu/QI/Photonics/tomography-files/tomo_chapter_2004.pdf    
+    def __init__(self, basis):
+        self.basis = basis
+        # Initiate tomography object
+        self.tomolib = qLib.Tomography()
+
+    def run_tomography(self, measurements, intensity=None, method='MLE'):  # possible methods are: 'MLE', 'HMLE', 'LINEAR'
+        if intensity is None:
+            intensity = np.ones(len(self.basis))
+        input = []
+        for b, m, in zip(self.basis, measurements):
+            input.append([1., 0, 0, m, *b])
+        [rho_approx, intensity, fval] = self.tomolib.state_tomography(np.array(input), intensity, method=method)
+        return rho_approx
