@@ -204,7 +204,7 @@ def torch_bures_distance(
 
 
 def torch_fidelity(
-    rho1 : torch.Tensor,
+    rho1: torch.Tensor,
     rho2: torch.Tensor
 ):
     unitary1, singular_values, unitary2 = torch.linalg.svd(rho1)
