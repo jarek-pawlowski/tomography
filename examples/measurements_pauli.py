@@ -1,7 +1,8 @@
-import utils_measure as utils
-
 import numpy as np
 import functools as ft
+
+import src.utils_measure as utils
+
 
 number_qubits = 3
 space_size = int(pow(2, number_qubits))

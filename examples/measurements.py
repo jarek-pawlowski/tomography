@@ -1,6 +1,7 @@
+import numpy as np
+
 import src.utils_measure as utils
 
-import numpy as np
 
 measurement = utils.Measurement(utils.Kwiat, 2)
 breakpoint()

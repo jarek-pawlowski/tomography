@@ -1,6 +1,7 @@
-import utils_measure as utils
-
 import numpy as np
+
+import src.utils_measure as utils
+
 
 measurement = utils.Measurement(utils.Kwiat, 2)
 Kwiat_code = utils.Kwiat_library(utils.basis_for_Kwiat_code)
