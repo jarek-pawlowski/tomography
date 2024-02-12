@@ -33,7 +33,7 @@ print(np.round(rho_rec, 2))
 
 # test for custom state:
 print("tomograpy for custom state")
-rho_in = np.load('./test_states/dens0.npy')
+rho_in = np.load('./data/val/matrices/dens0.npy')
 print(np.round(rho_in, 2))
 m_all = np.array([[measurement.measure(rho_in.reshape((2,2,2,2)), [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
 rho_rec = Kwiat_code.run_tomography(m_all, method='MLE')
