@@ -3,8 +3,9 @@ import utils_measure as utils
 import numpy as np
 
 measurement = utils.Measurement(utils.Kwiat, 2)
+measurement = utils.Measurement(utils.Stokes, 2)
 Kwiat_code = utils.Kwiat_library(utils.basis_for_Kwiat_code)
-breakpoint()
+
 
 rho_in = np.ones((2,2,2,2))/4.
 m_all = np.array([[measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
