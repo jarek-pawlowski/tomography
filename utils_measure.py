@@ -105,6 +105,10 @@ Kwiat = Basis([tensordot(states.H, states.H, conj_tr=(False,True)),
 Pauli = Basis([tensordot(states.D, states.D, conj_tr=(False,True)),
                tensordot(states.L, states.L, conj_tr=(False,True)),
                tensordot(states.H, states.H, conj_tr=(False,True))])
+Stokes = Basis([np.array([[1,0],[0,1]]),
+                np.array([[1,1],[1,1]])*.5,
+                np.array([[1,-1j],[1j,1]])*.5,
+                np.array([[1,0],[0,0]])])
 
 Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
