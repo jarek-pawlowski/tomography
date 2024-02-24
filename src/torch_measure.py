@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 from qiskit.quantum_info import concurrence, DensityMatrix
 
-from src.utils_measure import Tomography, Kwiat_projectors
+from src.utils_measure import Tomography, Kwiat_projectors, Kwiat_library, basis_for_Kwiat_code
 
 
 def tensordot(a: torch.Tensor, b: torch.Tensor, indices: t.Tuple[t.List[int], t.List[int]] = ([1], [0]), moveaxis=None):
@@ -104,6 +104,9 @@ def test_reconstruction_measurement_noise_for_variance(
     criterions: t.Dict[str, t.Callable],
     varying_input_idx: t.Optional[t.List[int]],
     variance: float,
+    strategy: str = 'tomography',
+    method: str = 'MLE', # param effective for 'optimized_tomography' strategy
+    use_intensity: bool = False # param effective for 'optimized_tomography' strategy
 ) -> t.Dict[str, t.List[float]]:
     
     variance_metrics = {name: 0 for name in criterions.keys()}
@@ -113,6 +116,8 @@ def test_reconstruction_measurement_noise_for_variance(
     
     tomography = Tomography(num_qubits, Kwiat_projectors)
     tomography.calulate_B_inv()
+
+    optimized_tomography = Kwiat_library(basis_for_Kwiat_code)
 
     with torch.no_grad():
         for rho, measurements, _ in tqdm(test_loader, desc=f' Variance: {variance}'):
@@ -124,7 +129,16 @@ def test_reconstruction_measurement_noise_for_variance(
 
             predictions = []
             for measurement in measurements:
-                rho_rec = tomography.reconstruct(measurement.numpy(), enforce_positiv_sem=True)
+                if strategy == 'tomography':
+                    rho_rec = tomography.reconstruct(measurement.numpy(), enforce_positiv_sem=True)
+                elif strategy == 'optimized_tomography':
+                    intensity = None
+                    if use_intensity:
+                        intensity = np.ones(len(measurement))
+                        intensity[varying_input_idx] = 1 - variance + 1e-6
+                    rho_rec = optimized_tomography.run_tomography(measurement.numpy(), method=method, intensity=intensity)
+                else:
+                    raise ValueError(f'Unknown strategy: {strategy}')
                 rho_rec = rho_rec.reshape((dim, dim))
                 rho_rec = rho_rec / np.trace(rho_rec)
                 matrix_r = np.real(rho_rec)

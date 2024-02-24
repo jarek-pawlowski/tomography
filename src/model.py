@@ -221,6 +221,59 @@ class LSTMMeasurementPredictor(nn.Module):
         self.load_state_dict(torch.load(path))
 
 
+class LSTMMeasurementSelector(nn.Module):
+    def __init__(self, num_qubits: int , possible_basis_matrices: t.List[torch.Tensor], layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(LSTMMeasurementSelector, self).__init__()
+        self.max_num_measurements = max_num_measurements
+        self.num_qubits = num_qubits
+        self.basis_dim = 2 * (num_qubits*4)
+        self.bases = possible_basis_matrices
+        self.dens_matrix_dim = 2 * (4 ** num_qubits)
+        # self.measurement_predictor = MLP(layers, 1 + self.basis_dim, hidden_size, self.basis_sufficient_params)
+        self.measurement_selector = nn.LSTMCell(1 + self.basis_dim, hidden_size)
+        self.projectors = nn.ModuleList([nn.Sequential(
+            nn.Linear(hidden_size, len(self.bases)),
+            nn.Softmax(dim=-1)
+        ) for _ in range(num_qubits)])
+        self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
+
+    def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
+        measurement, basis = first_measurement
+        basis_as_vector = torch.stack((basis.real, basis.imag), dim=-1).view(-1, basis.shape[1]*2*2*2)
+        measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+
+        h_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
+        c_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
+
+        measurements_with_basis = [measurement_predictor_input]
+        for i in range(self.max_num_measurements - 1):
+            # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
+            h_i, c_i  = self.measurement_selector(measurement_predictor_input, (h_i, c_i))
+            measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1)
+
+            new_measurement_predictor_input = []
+            for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
+                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
+                basis_matrices = torch.stack([self.bases[i] for i in torch.argmax(measurement_basis_probability_k, dim=-1)], dim=0).to(rho_k.device)
+
+                new_measurement = measure(rho_k, (basis_matrices[0], basis_matrices[1])) # assuming 2 qubits
+                new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(basis.shape[1]*2*2*2)
+                new_measurement_predictor_input.append(torch.cat((new_measurement.unsqueeze(0), new_basis_as_vector), dim=-1))
+
+            measurement_predictor_input = torch.stack(new_measurement_predictor_input, dim=0)
+            measurements_with_basis.append(measurement_predictor_input)
+
+        measurements_with_basis = torch.stack(measurements_with_basis, dim=1)
+        reconstructed_matrices = self.matrix_reconstructor(measurements_with_basis)
+        return reconstructed_matrices
+
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
 class DensityMatrixReconstructor(nn.Module):
     def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16):
         super(DensityMatrixReconstructor, self).__init__()

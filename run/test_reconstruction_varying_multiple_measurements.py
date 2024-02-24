@@ -17,8 +17,8 @@ batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped.log'
-plot_path = './plots/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped.png'
+results_path = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.log'
+plot_path = './plots/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.png'
 
 num_measurements = 16
 num_repetitions = 10
@@ -33,12 +33,16 @@ criterions = {
     'bures_distance': bures_distance
 }
 
-for i in range(1, num_measurements + 1):
+strategy = 'optimized_tomography'
+method = 'MLE'
+use_intensity = False
+
+for i in range(4, num_measurements + 1):
     print('Num measurements:', i)
     avg_metrics = {}
     for j in tqdm(range(num_repetitions), desc='Averaging metrics...'):
-        measurement_ids = np.random.randint(0, num_measurements, i)
-        test_metrics = test_reconstruction_measurement_noise_for_variance(test_loader, criterions, varying_input_idx=measurement_ids, variance=1.)
+        measurement_ids = np.random.randint(0, num_measurements, i) # maybe better to repeat for all measurements (at least for i = 1)
+        test_metrics = test_reconstruction_measurement_noise_for_variance(test_loader, criterions, varying_input_idx=measurement_ids, variance=1., strategy=strategy, method=method, use_intensity=use_intensity)
         for metric_name, metric_value in test_metrics.items():
             if metric_name not in avg_metrics:
                 avg_metrics[metric_name] = 0
