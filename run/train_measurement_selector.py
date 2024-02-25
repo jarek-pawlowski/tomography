@@ -23,7 +23,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_basis_selector'
+    model_name = 'full_lstm_basis_selector_v2'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 

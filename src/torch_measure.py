@@ -16,7 +16,7 @@ def tensordot(a: torch.Tensor, b: torch.Tensor, indices: t.Tuple[t.List[int], t.
         result = torch.moveaxis(result, *moveaxis)
     return result
 
-def trace(a):
+def trace(a: torch.Tensor):
     # performs tensor contraction Tijk...ijk...
     dim = int(len(a.shape)/2)
     indices = np.indices([2]*dim).reshape(dim,-1).T
