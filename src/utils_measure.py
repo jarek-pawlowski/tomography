@@ -89,6 +89,7 @@ class States:
             self.L = np.array([[1],[1j]])/np.sqrt(2)
             self.R = np.array([[1],[-1j]])/np.sqrt(2)
             self.D = np.array([[1],[1]])/np.sqrt(2)
+            self.Db = np.array([[1],[-1]])/np.sqrt(2)
         
     
 class Basis:
@@ -105,14 +106,24 @@ Kwiat = Basis([tensordot(states.H, states.H, conj_tr=(False,True)),
 Pauli = Basis([tensordot(states.D, states.D, conj_tr=(False,True)),
                tensordot(states.L, states.L, conj_tr=(False,True)),
                tensordot(states.H, states.H, conj_tr=(False,True))])
+Pauli_c = Basis([tensordot(states.Db, states.Db, conj_tr=(False,True)),
+                 tensordot(states.R, states.R, conj_tr=(False,True)),
+                 tensordot(states.V, states.V, conj_tr=(False,True))])
+
+Stokes = Basis([np.array([[1,0],[0,1]]),
+                np.array([[1,1],[1,1]])*.5,
+                np.array([[1,-1j],[1j,1]])*.5,
+                np.array([[1,0],[0,0]])])
 
 Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
 
 class Measurement:
     # nice compendium: https://arxiv.org/pdf/2201.07968.pdf
-    def __init__(self, basis, no_qubits):
+    def __init__(self, basis, no_qubits, basis_c=None):
         self.basis = basis.basis
+        if basis_c is not None:
+            self.basis_c = basis_c.basis
         self.no_qubits = no_qubits
 
     def measure_single(self, rho, qubit_index, basis_index, return_state=False):
@@ -134,7 +145,15 @@ class Measurement:
         prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
         # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
-            return prob.real, Ppsi/np.sqrt(prob)
+            random = np.random.random()
+            if prob > random: 
+                return 1, Ppsi/np.sqrt(prob)
+            else:
+                Ppsi = psi.copy()
+                Ppsi = tensordot(self.basis_c[basis_index], Ppsi, indices=(1,qubit_index), moveaxis=(0,qubit_index))
+                to_contract = tuple(np.arange(self.no_qubits))
+                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+                return -1, Ppsi/np.sqrt(prob)
         else:
             return prob
 
