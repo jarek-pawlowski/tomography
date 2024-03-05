@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 import src.utils_measure as utils
 
-def measure_shadow(T):
+def measure_shadow(T,number_qubits):
     
     snapshots = []
 
@@ -25,7 +25,7 @@ def measure_shadow(T):
         
     return snapshots
 
-def reconstruct_from_shadow(T, rho0, snapshots, space_size):
+def reconstruct_from_shadow(T, rho0, snapshots, space_size, number_qubits):
     
     rho1 = np.zeros_like(rho0.reshape(space_size,space_size))
 
@@ -60,33 +60,60 @@ print(np.around(rho0.reshape(space_size,space_size), 3))
 print("\n")
 print(np.around(rho1, 3))
 '''
+#number_qubits = [2, 3]
+number_qubits = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+set_of_T = [10, 100, 1000, 10000, 100000]
+#set_of_T = [100, 1000, 10000]
 
-number_qubits = 2
-space_size = int(pow(2, number_qubits))
-measurement = utils.Measurement(utils.Pauli, number_qubits)
-psi_in = np.ones((2,2), dtype=complex)/2./np.sqrt(2.) #reshape to 2x2 tensor (each 2x2 matrix describes a single qubit)
-rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(False,True))
+all_data = []
+for qubit in number_qubits:
+    print(f"This is for {qubit}")
+    
+    space_size = int(pow(2, qubit))
+    measurement = utils.Measurement(utils.Pauli, qubit, basis_c=utils.Pauli_c)
+    
+    #Pure state
+    #psi_in = np.ones(tuple(2 for _ in range(qubit)), dtype=complex)/2./np.sqrt(2.) #reshape to 2x2 tensor (each 2x2 matrix describes a single qubit)
+    
+    #test for a Bell state: 
+    #psi_in = np.zeros(tuple(2 for _ in range(qubit)), dtype=complex)
+    #psi_in[(0,) * (qubit)] = 1./np.sqrt(2.)
+    #psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
+    
+    #loaded states by user:
+    psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
+    psi_in = psi_in.astype(np.complex128)
 
-set_of_T = [100, 1000, 10000, 100000]
-norms = []
-for t in set_of_T: 
-    print(f"Start {t}")
-    snapshots = measure_shadow(t)
-    rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size)
-    norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
-    
-plt.plot(set_of_T, norms, '-o')
-plt.xscale('log')
-plt.yscale('log')
-plt.show()
-    
-    
+    rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(False,True))
+    norms = []
+    for t in set_of_T: 
+        print(f"Start {t}")
+        snapshots = measure_shadow(t, qubit)
+        rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size, qubit)
+        norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
+        
+        #np.set_printoptions(linewidth=200)
+        #print(np.around(rho0.reshape(space_size,space_size), 3))
+        #print("\n")
+        #print(np.around(rho1, 3))
+        
 
-#test dla bella potem 
-# test for Bell state:
-rho_in = np.zeros((4,4))
-rho_in[0,0] = 0.5
-rho_in[0,3] = 0.5
-rho_in[3,0] = 0.5
-rho_in[3,3] = 0.5
-m_all = np.array([[measurement.measure(rho_in.reshape((2,2,2,2)), [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
+    fig, ax = plt.subplots()
+    ax.plot(set_of_T, norms, '-o', label = f"{qubit} qubits")
+    ax.set_xscale('log')
+    # Setting the title
+    ax.set_title(f"{qubit} qubits chain ground state")
+    # Saving the figure
+    fig.savefig(f'./plots/{qubit}_qubits_shadow_real_chain.png')
+    
+    # Accumulate data for final plot
+    all_data.append((set_of_T, norms, f"{qubit} qubits"))
+    
+    # Create additional plot to show all lines together
+    fig, ax = plt.subplots()
+    for set_of_T, norms, label in all_data:
+        ax.plot(set_of_T, norms, '-o', label=label)
+    ax.set_xscale('log')
+    ax.set_title("All qubits together real_chain")
+    ax.legend()  # Display a legend to identify each line
+    fig.savefig('./plots/all_qubits_together_real_chain.png')
