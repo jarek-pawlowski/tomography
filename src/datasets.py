@@ -52,11 +52,24 @@ class DensityMatrixDataset(Dataset):
         return parsed_data
     
 
+class VectorDensityMatrixDataset(DensityMatrixDataset):
+    def __init__(self, root_path: str) -> None:
+        super().__init__(root_path)
+
+    def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
+        rho, label = super().__getitem__(idx)
+        upper_real = torch.triu(rho[0], diagonal=0)
+        lower_imag = torch.tril(rho[1], diagonal=-1)
+        matrix = upper_real + lower_imag
+        return (torch.reshape(matrix, (-1,)), label)
+
+
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None) -> None:
+    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False) -> None:
         super().__init__(root_path)
         self.measurement = Measurement(Kwiat, 2)
         self.return_density_matrix = return_density_matrix
+        self.binary_label = binary_label
         if data_limit is not None:
             self.dict = self.dict[:data_limit]
 
@@ -71,6 +84,8 @@ class MeasurementDataset(DensityMatrixDataset):
         tensor = torch.from_numpy(measurements).float()
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)
+        if self.binary_label:
+            label = torch.where(label > 1.e-6, torch.tensor(1.), torch.tensor(0.))
 
         if not self.return_density_matrix:
             return (tensor, label)
