@@ -9,11 +9,11 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import LSTMMeasurementSelector
-from src.torch_utils import train_measurement_predictor, test_measurement_predictor
+from src.torch_utils import train_measurement_predictor, test_measurement_predictor, bases_loss
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.utils_measure import Kwiat
 
-
+    
 def main():
     # load data
     batch_size = 128
@@ -23,11 +23,14 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_basis_selector_v2'
+    model_name = 'full_lstm_basis_selector_v3_kwiat_basis_loss'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
+
+    def kwiat_basis_loss_fn(predicted_bases: torch.Tensor) -> torch.Tensor:
+        return bases_loss(predicted_bases, torch.stack(basis_matrices), reduction='mean')
     
     model_params = {
         'num_qubits': 2,
@@ -51,7 +54,7 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, bases_loss_fn=kwiat_basis_loss_fn)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss']['measurement 15'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']['measurement 15']

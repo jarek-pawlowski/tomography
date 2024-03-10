@@ -46,12 +46,13 @@ def train_measurement_predictor(
     optimizer: Optimizer, 
     epoch: int, 
     log_interval: int = 100, 
-    criterion: t.Callable = nn.MSELoss()
+    criterion: t.Callable = nn.MSELoss(),
+    bases_loss_fn: t.Optional[t.Callable] = None
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
     model.to(device)
-    metrics = {'train_loss': 0}
+    metrics = {'train_loss': 0, 'bases_loss': 0}
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
     for batch_idx, (rho, measurement, _) in pbar:
         rho, measurement = rho.to(device), measurement.to(device)
@@ -59,16 +60,21 @@ def train_measurement_predictor(
         basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
         basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
         measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-        predicted_rhos = model(measurement_with_basis, rho)
+        predicted_rhos, predicted_bases = model(measurement_with_basis, rho)
         loss = torch.zeros(1).to(device)
         for i in range(predicted_rhos.shape[1]):
             loss += criterion(predicted_rhos[:, i], rho)
+        if bases_loss_fn is not None:
+            bases_loss = bases_loss_fn(predicted_bases)
+            metrics['bases_loss'] += bases_loss.item()
+            loss += bases_loss
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
         if batch_idx % log_interval == 0:
             pbar.set_postfix({'loss': loss.item()})
     metrics['train_loss'] /= len(train_loader)
+    metrics['bases_loss'] /= len(train_loader)
     return metrics
 
 
@@ -113,7 +119,7 @@ def test_measurement_predictor(
             basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
             basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
             measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-            predicted_rhos = model(measurement_with_basis, rho)        
+            predicted_rhos, predicted_bases = model(measurement_with_basis, rho)        
             for name, criterion in criterions.items():
                 for i in range(predicted_rhos.shape[1]):
                     metrics[name][f'measurement {i}'] += criterion(predicted_rhos[:, i], rho).item()
@@ -217,3 +223,23 @@ def torch_fidelity(
 
     fid = torch.linalg.norm(s1sqrt.matmul(s2sqrt), ord="nuc") ** 2
     return fid.to(torch.double)
+
+
+def bases_loss(
+    predicted_bases: torch.Tensor, # shape (batch_size, num_measurements, num_qubits, 2, 2)
+    target_bases: torch.Tensor, # shape (num_target_bases, 2, 2)
+    reduction: str = 'mean'
+) -> torch.Tensor:
+    predicted_bases_complex_stack = torch.stack((predicted_bases.real, predicted_bases.imag), dim=-3)
+    bases_loss = []
+    for target_base in target_bases:
+        target_base = target_base.view(1, 1, 1, 2, 2).expand(predicted_bases.shape[0], predicted_bases.shape[1], predicted_bases.shape[2], -1, -1).to(predicted_bases.device)
+        target_base_complex_stack = torch.stack((target_base.real, target_base.imag), dim=-3)
+        base_loss = torch.nn.functional.mse_loss(predicted_bases_complex_stack, target_base_complex_stack, reduction='none').mean(dim=(-1, -2, -3))
+        bases_loss.append(base_loss)
+    bases_loss = torch.stack(bases_loss) # shape (num_target_bases, batch_size, num_measurements, num_qubits)
+    bases_loss = torch.min(bases_loss, dim=0).values
+
+    if reduction == 'mean':
+        return bases_loss.mean()
+    return bases_loss

@@ -4,3 +4,5 @@ test_states/
 /plots
 /data
 __pycache__
+*.joblib
+*.ipynb
