@@ -28,11 +28,11 @@ def load_metrics_from_file(log_path: str) -> t.Dict[str, np.ndarray]:
     return {name: data[:, i] for i, name in enumerate(metrics_names)}
 
 
-def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch') -> None:
+def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', **kwargs: t.Dict[str, t.Any]) -> None:
     metrics = load_metrics_from_file(log_path)
     epochs = metrics.pop(xaxis)
     for metric_name, metric_value in metrics.items():
-        plt.plot(epochs, metric_value, label=metric_name)
+        plt.plot(epochs, metric_value, label=metric_name, **kwargs)
     plt.title(title)
     plt.xlabel(xaxis)
     plt.legend()
@@ -40,6 +40,7 @@ def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
     plt.show()
+    plt.close()
 
 
 def plot_metrics_from_files(path_common_prefix: str, range_: t.Tuple[int, int], title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', specified_metric: t.Optional[str] = None) -> None:
@@ -51,6 +52,7 @@ def plot_metrics_from_files(path_common_prefix: str, range_: t.Tuple[int, int], 
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight')
     plt.show()
+    plt.close()
 
 
 def plot_metrics_from_common_prefix(path_common_prefix: str, range_: t.Tuple[int, int], xaxis: str = 'epoch', specified_metric: t.Optional[str] = None, label_prefix: str = '', linestyle='solid') -> None:
@@ -91,6 +93,7 @@ def multiplot_metrics_from_files(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
+    plt.close()
 
 
 def plot_map_from_files(
@@ -153,3 +156,4 @@ def plot_map_from_files(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
+    plt.close()

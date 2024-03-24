@@ -1,3 +1,4 @@
+from collections import defaultdict
 from tqdm import tqdm
 import typing as t
 import random
@@ -7,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
+from torch.distributions.multivariate_normal import MultivariateNormal
 from qiskit.quantum_info import DensityMatrix, state_fidelity
 
 from src.utils_measure import Kwiat
@@ -161,6 +163,170 @@ def test_varying_input(
             metrics[variance][name] /= len(test_loader)
             print(f'{name} - variance {variance}: {metrics[variance][name]:.4f}')
     return metrics
+
+
+def test_varying_feature(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device, 
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    feature_idx: t.Optional[t.List[int]],
+    feature_value_range: t.Tuple[int, int] = (0., 1.),
+    step: float = 0.1,
+    model_output_mean: t.Optional[torch.Tensor] = None,
+) -> t.Dict[str, t.List[float]]:
+    
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+    
+    avg_outputs = defaultdict(float)
+    avg_distances = defaultdict(float)
+    for feature_value in np.arange(*feature_value_range, step):
+        with torch.no_grad():
+            for data, target in tqdm(test_loader, desc=f' Feature value: {feature_value}'):
+                data, target = data.to(device), target.to(device)
+                data[:, torch.tensor(feature_idx)] = feature_value
+                output = model(data)
+                if model_output_mean is not None:
+                    avg_distances[feature_value] += torch.abs(output - model_output_mean).mean().item()
+                avg_outputs[feature_value] += output.mean().item()
+        avg_outputs[feature_value] /= len(test_loader)
+        avg_distances[feature_value] /= len(test_loader)
+
+    outputs = torch.tensor(list(avg_outputs.values()))
+    mean_metrics = {
+        criterion_name: criterion(outputs) for criterion_name, criterion in criterions.items()
+    }
+    distances = torch.tensor(list(avg_distances.values()))
+    distance_metrics = {
+        criterion_name: criterion(distances) for criterion_name, criterion in criterions.items()
+    }
+    return mean_metrics, distance_metrics
+
+
+def test_output_statistics_for_given_feature(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device, 
+    test_loader: DataLoader,
+    feature_idx: t.Optional[t.List[int]],
+    criterions: t.Dict[str, t.Callable],
+    model_output_mean: t.Optional[torch.Tensor] = None
+) -> t.Dict[str, t.List[float]]:
+    
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+    
+    outputs = []
+    with torch.no_grad():
+        for data, _ in tqdm(test_loader, desc=f' Testing model...'):
+            data = data.to(device)
+            feature_data = data[:, torch.tensor(feature_idx)]
+            # masked_data = torch.zeros_like(data)
+            masked_data = torch.rand_like(data)
+            masked_data[:, torch.tensor(feature_idx)] = feature_data
+            output = model(masked_data)
+            if model_output_mean is not None:
+                output -= model_output_mean
+            outputs.append(output)
+    outputs = torch.cat(outputs)
+    metrics = {
+        criterion_name: criterion(outputs) for criterion_name, criterion in criterions.items()
+    }
+    return metrics
+
+
+def test_output_statistics_varying_feature(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device, 
+    feature_idx: t.Optional[t.List[int]],
+    criterions: t.Dict[str, t.Callable],
+    features_num: int = 16,
+    feature_value_range: t.Tuple[int, int] = (0., 1.),
+    step: float = 0.1, 
+    mean: t.Optional[torch.Tensor] = None,
+    covariance_matrix: t.Optional[torch.Tensor] = None,
+    model_output_mean: t.Optional[torch.Tensor] = None
+) -> t.Dict[str, t.List[float]]:
+    
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+    
+    outputs = []
+    for feature_value in tqdm(np.arange(*feature_value_range, step), desc=f' Varying feature...'):
+        with torch.no_grad():
+            data = torch.zeros(1, features_num).to(device)
+            # generate data from multivariate normal distribution
+            if mean is not None and covariance_matrix is not None:
+                data = generate_sample_from_mean_and_covariance(mean, covariance_matrix, batch_size=100)
+            data[:, torch.tensor(feature_idx)] = feature_value
+            output = model(data)
+            if model_output_mean is not None:
+                output -= model_output_mean
+            outputs.append(torch.mean(output))
+    # outputs = torch.cat(outputs)
+    outputs = torch.tensor(outputs)
+    metrics = {
+        criterion_name: criterion(outputs) for criterion_name, criterion in criterions.items()
+    }
+    return metrics
+
+
+def calculate_mean_model_output_with_varied_feature(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device,
+    test_loader: DataLoader,
+    features_value_range: t.Tuple[int, int] = (0., 1.),
+    step: float = 0.1, 
+) -> float:
+    
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+    
+    avg_output = 0.
+    with torch.no_grad():
+        for data, _ in tqdm(test_loader, desc=f' Calculating average model output...'):
+            data = data.to(device)
+            num_features = data.shape[1]
+            for feature_idx in range(num_features):
+                for feature_value in np.arange(*features_value_range, step):
+                    data[:, torch.tensor([feature_idx])] = feature_value
+                    output = model(data)
+                    avg_output += output.sum().item()
+    avg_output /= (len(test_loader.dataset) * len(np.arange(*features_value_range, step)) * num_features)
+    return avg_output
+
+
+
+def calculate_dataset_statistics(
+    data_loader: DataLoader,
+    device: torch.device,
+    callable: t.Optional[t.Callable] = None
+):
+    # calculate latent space distribution (mean and std)
+    population = []
+    for data, _ in tqdm(data_loader, 'Collecting data statistics...'):
+        data = data.to(device)
+        if callable is not None:
+            data = callable(data)
+        population.append(data)
+    population = torch.cat(population, dim=0)
+    statistics = {
+        'mean': torch.mean(population, dim=0),
+        'std': torch.std(population, dim=0),
+        'covariance_matrix': torch.cov(population.T),
+        'max': torch.max(population, dim=0).values,
+        'min': torch.min(population, dim=0).values
+    }
+    return statistics
+
+
+def generate_sample_from_mean_and_covariance(mean: torch.Tensor, covariance_matrix: torch.Tensor, batch_size: int = 1):
+    mvn = MultivariateNormal(mean, covariance_matrix)
+    return mvn.sample((batch_size,))
 
 
 def regressor_accuracy(

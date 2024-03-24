@@ -37,7 +37,7 @@ strategy = 'optimized_tomography'
 method = 'MLE'
 use_intensity = False
 
-for i in range(4, num_measurements + 1):
+for i in range(6, num_measurements + 1):
     print('Num measurements:', i)
     avg_metrics = {}
     for j in tqdm(range(num_repetitions), desc='Averaging metrics...'):

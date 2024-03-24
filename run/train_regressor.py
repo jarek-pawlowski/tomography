@@ -16,15 +16,15 @@ from src.logging import log_metrics_to_file, plot_metrics_from_file
 def main():
     # load data
     batch_size = 512
-    train_dataset = MeasurementDataset(root_path='./data/train/', binary_label=True)
-    test_dataset = MeasurementDataset(root_path='./data/val/', binary_label=True)
+    train_dataset = MeasurementDataset(root_path='./data/train/', mask_measurements=[0])
+    test_dataset = MeasurementDataset(root_path='./data/val/', mask_measurements=[0])
     # train_dataset = VectorDensityMatrixDataset(root_path='./data/train/')
     # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_save_path = './models/classifier.pt'
+    model_save_path = './models/regressor_masked_0.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
@@ -35,15 +35,15 @@ def main():
     'input_dropout': 0.0
 }
     # model = Regressor(**model_params)
-    model = Classifier(**model_params)
+    model = Regressor(**model_params)
 
     # train & test model
-    log_path = './logs/classifier.log'
+    log_path = './logs/regressor_masked_0.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-    # criterion = nn.MSELoss()
-    criterion = nn.BCELoss()
+    criterion = nn.MSELoss()
+    # criterion = nn.BCELoss()
     criterions = {
         'test_loss': criterion
     }
@@ -59,7 +59,7 @@ def main():
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/classifier_loss.png')
+    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/regressor_masked_0.png')
 
 
 if __name__ == '__main__':

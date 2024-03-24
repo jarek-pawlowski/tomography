@@ -65,11 +65,12 @@ class VectorDensityMatrixDataset(DensityMatrixDataset):
 
 
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False) -> None:
+    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False, mask_measurements: t.Optional[t.List] = None) -> None:
         super().__init__(root_path)
         self.measurement = Measurement(Kwiat, 2)
         self.return_density_matrix = return_density_matrix
         self.binary_label = binary_label
+        self.mask_measurements = mask_measurements
         if data_limit is not None:
             self.dict = self.dict[:data_limit]
 
@@ -81,6 +82,8 @@ class MeasurementDataset(DensityMatrixDataset):
         # reshape density matrix from (4, 4) to (2, 2, 2, 2)
         matrix = matrix.reshape((2, 2, 2, 2))
         measurements = self._get_all_measurements(matrix)
+        if self.mask_measurements is not None:
+            measurements = np.array([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
         tensor = torch.from_numpy(measurements).float()
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)

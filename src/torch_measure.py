@@ -58,14 +58,6 @@ def test_concurrence_measurement_noise_for_variance(
 ) -> t.Dict[str, t.List[float]]:
     
     variance_metrics = {name: 0 for name in criterions.keys()}
-    num_skipped = 0
-
-    num_qubits = 2 # tested for 2 qubits
-    dim = 2**num_qubits
-    
-    tomography = Tomography(num_qubits, Kwiat_projectors)
-    tomography.calulate_B_inv()
-
     with torch.no_grad():
         for data, target in tqdm(test_loader, desc=f' Variance: {variance}'):
             data_min = torch.maximum(data[:, torch.tensor(varying_input_idx)] - variance, torch.zeros_like(data[:, torch.tensor(varying_input_idx)]))
@@ -73,30 +65,35 @@ def test_concurrence_measurement_noise_for_variance(
             interval = data_max - data_min + 1e-6
             varied_data = torch.rand_like(interval) * interval + data_min
             data[:, torch.tensor(varying_input_idx)] = varied_data
-
-            predictions = []
-            for measurements in data:
-                rho_rec = tomography.reconstruct(measurements.numpy(), enforce_positiv_sem=True)
-                rho_rec = rho_rec.reshape((dim, dim))
-                rho_rec = rho_rec / np.trace(rho_rec)
-                density_matrix = DensityMatrix(rho_rec)
-                try:
-                    conc = concurrence(density_matrix)
-                except:
-                    conc = -1
-                    num_skipped += 1
-                predictions.append(conc)
-            predictions = torch.tensor(predictions).unsqueeze(-1)
-
+            predictions = calculate_concurrence_from_measurements(data)
             interval[predictions.squeeze() == -1] = 0
 
             for name, criterion in criterions.items():
 
                 variance_metrics[name] += ((criterion(predictions, target) * interval).sum() / interval.sum()).item() / len(test_loader)
 
-    print(f'Percentage of skipped samples (due to incorrect reconstruction): {num_skipped/len(test_loader.dataset)*100:.2f}')
-
     return variance_metrics
+
+
+def calculate_concurrence_from_measurements(measurements_data: torch.Tensor) -> torch.Tensor:
+    num_qubits = 2 # tested for 2 qubits
+    dim = 2**num_qubits
+    tomography = Tomography(num_qubits, Kwiat_projectors)
+    tomography.calulate_B_inv()
+
+    predictions = []
+    for measurements in measurements_data:
+        rho_rec = tomography.reconstruct(measurements.cpu().numpy(), enforce_positiv_sem=True)
+        rho_rec = rho_rec.reshape((dim, dim))
+        rho_rec = rho_rec / np.trace(rho_rec)
+        density_matrix = DensityMatrix(rho_rec)
+        try:
+            conc = concurrence(density_matrix)
+        except:
+            conc = -1
+        predictions.append(conc)
+    predictions = torch.tensor(predictions).unsqueeze(-1)
+    return predictions.to(measurements_data.device)
 
 
 def test_reconstruction_measurement_noise_for_variance(
