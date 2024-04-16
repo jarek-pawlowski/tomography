@@ -286,7 +286,7 @@ class LSTMMeasurementSelector(nn.Module):
             nn.Linear(hidden_size, len(self.bases)),
             nn.Softmax(dim=-1)
         ) for _ in range(num_qubits)])
-        self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
+        self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)  # <- here
 
     def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
         measurement, basis = first_measurement
@@ -331,9 +331,12 @@ class LSTMMeasurementSelector(nn.Module):
             predicted_bases.append(torch.stack(new_predicted_bases, dim=0))
 
         measurements_with_basis = torch.stack(measurements_with_basis, dim=1)
-        reconstructed_matrices = self.matrix_reconstructor(measurements_with_basis) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
+        reconstructed_matrices = self.matrix_reconstructor(measurements_with_basis) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)  # <- here
         predicted_bases = torch.stack(predicted_bases, dim=1) # shape (batch, max_num_measurements, num_qubits, 2, 2)
         return reconstructed_matrices, predicted_bases
+
+# czemu lstm jako rekonstruktor?
+# jak to uruchamiac?
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)
