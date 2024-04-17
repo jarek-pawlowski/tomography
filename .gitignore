@@ -6,3 +6,4 @@ test_states/
 __pycache__
 *.joblib
 *.ipynb
+*.png
