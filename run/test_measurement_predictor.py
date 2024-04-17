@@ -20,7 +20,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis'
+    model_name = 'full_lstm_measure_basis_kwiat_basis_loss'
     model_save_path = f'./models/{model_name}.pt'
     
     model_params = {

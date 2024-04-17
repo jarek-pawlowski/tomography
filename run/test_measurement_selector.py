@@ -23,7 +23,7 @@ def main():
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
 
     # create model
-    model_name = 'full_lstm_basis_selector_v3_kwiat_basis_loss'
+    model_name = 'full_lstm_basis_selector_v3'
     model_save_path = f'./models/{model_name}.pt'
     
     model_params = {

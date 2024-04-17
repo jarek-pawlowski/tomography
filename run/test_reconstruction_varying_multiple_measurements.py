@@ -17,8 +17,8 @@ batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.log'
-plot_path = './plots/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.png'
+results_path = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_zeroed_tomography.log'
+plot_path = './plots/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_zeroed_tomography.png'
 
 num_measurements = 16
 num_repetitions = 10
@@ -33,11 +33,11 @@ criterions = {
     'bures_distance': bures_distance
 }
 
-strategy = 'optimized_tomography'
+strategy = 'tomography'
 method = 'MLE'
 use_intensity = False
 
-for i in range(6, num_measurements + 1):
+for i in range(1, num_measurements + 1):
     print('Num measurements:', i)
     avg_metrics = {}
     for j in tqdm(range(num_repetitions), desc='Averaging metrics...'):

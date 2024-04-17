@@ -55,13 +55,15 @@ class Tomography:
         self.Gamma = np.array([G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G15, G16])
         assert self.tomo_dim == len(self.Gamma), "dim is differen than number of Gamma matrices"
 
-    def calulate_B_inv(self):
+    def calulate_B_inv(self, zero_measurements=None):
         # determine inverse of B matrix (Eq. 3.12 in PHYSICAL REVIEW A, VOLUME 64, 052312)
         B = np.zeros((self.tomo_dim, self.tomo_dim), dtype=complex)
         for nu in range(self.tomo_dim):
             for mu in range(self.tomo_dim):
                 B[nu,mu] = tensordot(self.projection_basis[nu], tensordot(self.Gamma[mu], self.projection_basis[nu]), conj_tr=(True,False)).item()
-        self.B_inv = inv(B) 
+        self.B_inv = inv(B)
+        if zero_measurements is not None:
+            self.B_inv[:, zero_measurements] = 0
         
     def reconstruct(self, measurements, enforce_positiv_sem=False):
         # calculate state reconstruction (Eq. 3.13 in PHYSICAL REVIEW A, VOLUME 64, 052312)

@@ -20,7 +20,7 @@ test_dataset = MeasurementDataset(root_path='./data/val/')
 # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-model_name = 'tomography'
+model_name = 'regressor'
 results_path_prefix = f'./logs/{model_name}_features_importance/real_distribution_range_features_importance_with_varied_input_mean_'
 results_path = '{}{}.log'
 plot_path = f'./plots/{model_name}_features_importance/real_distribution_range_features_importance_with_varied_input_mean_' + '{}.png'
@@ -110,20 +110,20 @@ print("Model min:", model_dataset_statistics['min'])
 
 print("Model varied input mean:", model_varied_input_mean)
 
-for i in range(0, model_params['input_dim']):
-    print('Measurement', i)
-    min_input_value = dataset_statistics['min'][i].item()
-    max_input_value = dataset_statistics['max'][i].item()
+# for i in range(0, model_params['input_dim']):
+#     print('Measurement', i)
+#     min_input_value = dataset_statistics['min'][i].item()
+#     max_input_value = dataset_statistics['max'][i].item()
 
-    # dataset_feature_test_metrics = test_output_statistics_for_given_feature(model, device, test_loader, feature_idx=[i], criterions=criterions)
-    # feature_varying_metrics = test_output_statistics_varying_feature(model, device, feature_idx=[i], criterions=criterions, features_num=16, feature_value_range=(min_input_value, max_input_value), step=0.01, mean=mean, covariance_matrix=covariance_matrix)
-    dataset_mean_test_metrics, dataset_distance_test_metrics  = test_varying_feature(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_value_range=(min_input_value, max_input_value), step=0.01)
+#     # dataset_feature_test_metrics = test_output_statistics_for_given_feature(model, device, test_loader, feature_idx=[i], criterions=criterions)
+#     # feature_varying_metrics = test_output_statistics_varying_feature(model, device, feature_idx=[i], criterions=criterions, features_num=16, feature_value_range=(min_input_value, max_input_value), step=0.01, mean=mean, covariance_matrix=covariance_matrix)
+#     dataset_mean_test_metrics, dataset_distance_test_metrics  = test_varying_feature(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_value_range=(min_input_value, max_input_value), step=0.01)
 
-    write_mode = 'w' if i == 0 else 'a'
-    log_metrics_to_file(dataset_mean_test_metrics, results_path.format(results_path_prefix,  'mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
-    log_metrics_to_file(dataset_distance_test_metrics, results_path.format(results_path_prefix,  'distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
-    # log_metrics_to_file(feature_varying_metrics, results_path.format(results_path_prefix,  'feature_varying'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+#     write_mode = 'w' if i == 0 else 'a'
+#     log_metrics_to_file(dataset_mean_test_metrics, results_path.format(results_path_prefix,  'mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
+#     log_metrics_to_file(dataset_distance_test_metrics, results_path.format(results_path_prefix,  'distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
+#     # log_metrics_to_file(feature_varying_metrics, results_path.format(results_path_prefix,  'feature_varying'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
 
-# plot_metrics_from_file(results_path.format(results_path_prefix,  'dataset'), title=f'Metrics for all measurements', save_path=plot_path.format(f'dataset'), xaxis='measurement_idx', linestyle='-', marker='x')
-plot_metrics_from_file(results_path.format(results_path_prefix,  'mean_dataset_values'), title=f'Metrics for all measurements', save_path=plot_path.format(f'mean_dataset_values'), xaxis='measurement_idx', linestyle='-', marker='x')
-plot_metrics_from_file(results_path.format(results_path_prefix,  'distance_dataset_values'), title=f'Metrics for all measurements', save_path=plot_path.format(f'distance_dataset_values'), xaxis='measurement_idx', linestyle='-', marker='x')
+# # plot_metrics_from_file(results_path.format(results_path_prefix,  'dataset'), title=f'Metrics for all measurements', save_path=plot_path.format(f'dataset'), xaxis='measurement_idx', linestyle='-', marker='x')
+# plot_metrics_from_file(results_path.format(results_path_prefix,  'mean_dataset_values'), title=f'Metrics for all measurements', save_path=plot_path.format(f'mean_dataset_values'), xaxis='measurement_idx', linestyle='-', marker='x')
+# plot_metrics_from_file(results_path.format(results_path_prefix,  'distance_dataset_values'), title=f'Metrics for all measurements', save_path=plot_path.format(f'distance_dataset_values'), xaxis='measurement_idx', linestyle='-', marker='x')

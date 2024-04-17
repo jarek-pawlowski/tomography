@@ -112,7 +112,7 @@ def test_reconstruction_measurement_noise_for_variance(
     dim = 2**num_qubits
     
     tomography = Tomography(num_qubits, Kwiat_projectors)
-    tomography.calulate_B_inv()
+    tomography.calulate_B_inv(varying_input_idx)
 
     optimized_tomography = Kwiat_library(basis_for_Kwiat_code)
 
