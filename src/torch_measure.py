@@ -10,8 +10,10 @@ from qiskit.quantum_info import concurrence, DensityMatrix
 from src.utils_measure import Tomography, Kwiat_projectors, Kwiat_library, basis_for_Kwiat_code
 
 
-def tensordot(a: torch.Tensor, b: torch.Tensor, indices: t.Tuple[t.List[int], t.List[int]] = ([1], [0]), moveaxis=None):
-    result = torch.tensordot(a, b, indices)
+def tensordot(a: torch.Tensor, b: torch.Tensor, indices: t.Tuple[t.List[int], t.List[int]] = ([1], [0]), moveaxis=None, conj_tr=(False,False)):
+    a1 = torch.conj(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
+    b1 = torch.conj(b.T) if conj_tr[1] else b  # warning: transposing reverses tensor indices    
+    result = torch.tensordot(a1, b1, indices)
     if moveaxis is not None:
         result = torch.moveaxis(result, *moveaxis)
     return result
@@ -23,15 +25,60 @@ def trace(a: torch.Tensor):
     indices_to_sum = np.tile(indices, 2)
     return torch.sum(torch.stack([a[tuple(idx)] for idx in indices_to_sum]))
 
-def measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, torch.Tensor]):
-    # measure all qubits using list of operators
-    # basis_vectors = operators to use when measuring subsequent qubits
-    
-    Prho = rho.clone()
-    for i, basis_vector in enumerate(basis_vectors):
-        Prho = tensordot(basis_vector, Prho, indices=([1], [i]), moveaxis=(0,i))
-    prob = trace(Prho).real
-    return prob
+
+class Measurement:
+
+    def __init__(self, no_qubits):   
+        self.no_qubits = no_qubits
+
+    def measure(self, rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, torch.Tensor]):
+        # measure all qubits using list of operators
+        # basis_vectors = operators to use when measuring subsequent qubits
+        
+        Prho = rho.clone()
+        for i, basis_vector in enumerate(basis_vectors):
+            Prho = tensordot(basis_vector, Prho, indices=([1], [i]), moveaxis=(0,i))
+        prob = trace(Prho).real
+        return prob
+
+    def measure_single_pure(self, psi: torch.Tensor, qubit_index: int, basis_matrix: torch.Tensor, basis_matrix_c: torch.Tensor, return_state: bool=False):
+        # measure single qubit in pure state using given operator 
+        Ppsi = psi.clone()
+        Ppsi = tensordot(basis_matrix, Ppsi, indices=([1],[qubit_index]), moveaxis=([0],[qubit_index]))
+        to_contract = tuple(torch.arange(self.no_qubits))
+        prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+        # to_contract[::-1] because transposing reverses tensor indices
+        if return_state:
+            random = torch.rand(1).item()
+            if prob > random: 
+                return 1, Ppsi/torch.sqrt(prob)
+            else:
+                Ppsi = psi.clone()
+                Ppsi = tensordot(basis_matrix_c, Ppsi, indices=([1],[qubit_index]), moveaxis=([0],[qubit_index]))
+                to_contract = tuple(torch.arange(self.no_qubits))
+                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+                return -1, Ppsi/torch.sqrt(prob)
+        else:
+            return prob
+        
+    def measure_single_mixed(self, rho: torch.Tensor, qubit_index: int, basis_matrix: torch.Tensor, basis_matrix_c: torch.Tensor, return_state: bool=False):
+        # measure single qubit in pure state using given operator 
+        Prho = rho.clone()
+        Prho = tensordot(basis_matrix, Prho, indices=([1],[qubit_index]), moveaxis=(0, qubit_index))
+        prob = trace(Prho).real
+        if return_state:
+            random = torch.rand(1).item()
+            if prob > random: 
+                Prho = tensordot(Prho, basis_matrix, indices=([self.no_qubits+qubit_index],[0]), moveaxis=(-1, qubit_index))
+                return 1, Prho/prob
+            else:
+                Prho = rho.clone()
+                Prho = tensordot(basis_matrix_c, Prho, indices=([1],[qubit_index]), moveaxis=(0, qubit_index))
+                prob = trace(Prho).real
+                Prho = tensordot(Prho, basis_matrix_c, indices=([self.no_qubits+qubit_index],[0]), moveaxis=(-1, qubit_index))
+                return -1, Prho/prob
+        else:
+            return prob
 
 
 def test_concurrence_measurement_noise(

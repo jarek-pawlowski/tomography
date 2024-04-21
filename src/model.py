@@ -295,14 +295,14 @@ class LSTMMeasurementSelector(nn.Module):
 
         h_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
         c_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
-
+        # initial guesses:
         measurements_with_basis = [measurement_predictor_input]
-        predicted_bases = [basis]
+        predicted_bases = [basis] 
         for i in range(self.max_num_measurements - 1):
             # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
             h_i, c_i  = self.measurement_selector(measurement_predictor_input, (h_i, c_i))
             measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
-
+            
             new_measurement_predictor_input = []
             new_predicted_bases = []
             for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
@@ -334,9 +334,6 @@ class LSTMMeasurementSelector(nn.Module):
         reconstructed_matrices = self.matrix_reconstructor(measurements_with_basis) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)  # <- here
         predicted_bases = torch.stack(predicted_bases, dim=1) # shape (batch, max_num_measurements, num_qubits, 2, 2)
         return reconstructed_matrices, predicted_bases
-
-# czemu lstm jako rekonstruktor?
-# jak to uruchamiac?
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)

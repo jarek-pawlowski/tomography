@@ -57,19 +57,26 @@ def train_measurement_predictor(
     metrics = {'train_loss': 0, 'bases_loss': 0}
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
     for batch_idx, (rho, measurement, _) in pbar:
+        no_qubits = np.log2(rho.shape[-1]).astype(int)
         rho, measurement = rho.to(device), measurement.to(device)
+        basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
+        snapshot_batch = []
+        # make initial measurements
+        # iterate over batch (to be paralelized!)
+        for rho_k in rho:
+            rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*no_qubits)
+            snapshot_batch.append(model.take_snapshot(rho_k, basis_comp_vector))
+        initial_snapshot_with_basis = (torch.Tensor(snapshot_batch).to(device), basis_comp_vector.expand(rho.shape[0], -1, -1))
         optimizer.zero_grad()
-        basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
-        basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
-        measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-        predicted_rhos, predicted_bases = model(measurement_with_basis, rho)
+        predicted_rhos, predicted_bases = model(initial_snapshot_with_basis, rho)
         loss = torch.zeros(1).to(device)
-        for i in range(predicted_rhos.shape[1]):
-            loss += criterion(predicted_rhos[:, i], rho)
-        if bases_loss_fn is not None:
-            bases_loss = bases_loss_fn(predicted_bases)
-            metrics['bases_loss'] += bases_loss.item()
-            loss += bases_loss
+        for i in range(len(predicted_rhos)):
+            loss += criterion(predicted_rhos[i], rho)
+        # enforce to select only selected Pauli as basis: ???
+        # if bases_loss_fn is not None:
+        #     bases_loss = bases_loss_fn(predicted_bases)
+        #     metrics['bases_loss'] += bases_loss.item()
+        #     loss += bases_loss
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
@@ -108,27 +115,32 @@ def test_measurement_predictor(
     device: torch.device,
     test_loader: DataLoader,
     criterions: t.Dict[str, t.Callable],
-    max_num_measurements: int = 16,
+    num_returned_reconstructions: int = 1,
 ) -> t.Dict[str, t.List[float]]:
         
     model.eval()
     model.to(device)
     
-    metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
+    metrics = {name: {f'reconstruction {i}': 0 for i in range(num_returned_reconstructions)} for name in criterions.keys()}
     with torch.no_grad():
         for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            no_qubits = np.log2(rho.shape[-1]).astype(int)
             rho, measurement = rho.to(device), measurement.to(device)
-            basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
-            basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
-            measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-            predicted_rhos, predicted_bases = model(measurement_with_basis, rho)        
+            basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
+            # iterate over batch (to be paralelized!)
+            snapshot_batch = []
+            for rho_k in rho:
+                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*no_qubits)
+                snapshot_batch.append(model.take_snapshot(rho_k, basis_comp_vector))
+            initial_snapshot_with_basis = (torch.Tensor(snapshot_batch).to(device), basis_comp_vector.expand(rho.shape[0], -1, -1))
+            predicted_rhos, _ = model(initial_snapshot_with_basis, rho)        
             for name, criterion in criterions.items():
-                for i in range(predicted_rhos.shape[1]):
-                    metrics[name][f'measurement {i}'] += criterion(predicted_rhos[:, i], rho).item()
+                for i in range(len(predicted_rhos)):
+                    metrics[name][f'reconstruction {i}'] += criterion(predicted_rhos[i], rho).item()
     for name in metrics.keys():
-        for i in range(max_num_measurements):
-            metrics[name][f'measurement {i}'] /= len(test_loader)
-            print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
+        for i in range(num_returned_reconstructions):
+            metrics[name][f'reconstruction {i}'] /= len(test_loader)
+            print(f'{name} - reconstruction {i}: {metrics[name][f"reconstruction {i}"]:.4f}')
     return metrics
 
 
