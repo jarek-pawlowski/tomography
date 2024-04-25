@@ -78,13 +78,13 @@ for qubit in number_qubits:
     #psi_in = np.ones(tuple(2 for _ in range(qubit)), dtype=complex)/2./np.sqrt(2.) #reshape to 2x2 tensor (each 2x2 matrix describes a single qubit)
     
     #test for a Bell state: 
-    psi_in = np.zeros(tuple(2 for _ in range(qubit)), dtype=complex)
-    psi_in[(0,) * (qubit)] = 1./np.sqrt(2.)
-    psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
+    #psi_in = np.zeros(tuple(2 for _ in range(qubit)), dtype=complex)
+    #psi_in[(0,) * (qubit)] = 1./np.sqrt(2.)
+    #psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
     
     #loaded states by user:
-    #psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
-    #psi_in = psi_in.astype(np.complex128)
+    psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
+    psi_in = psi_in.astype(np.complex128)
 
     rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #changed first to TRUE
     norms = []
@@ -133,6 +133,6 @@ for qubit in number_qubits:
    
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_title("All qubits together Bell chain log log")
+    ax.set_title("All qubits together Real chain log log")
     ax.legend()  # Display a legend to identify each line
-    fig.savefig('./plots/all_qubits_together_Bell_chain_slope.png')
+    fig.savefig('./plots/all_qubits_together_Real_chain_slope.png')
