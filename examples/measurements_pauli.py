@@ -1,8 +1,10 @@
 import numpy as np
 import functools as ft
 import matplotlib.pyplot as plt
+from scipy.stats import linregress
 
 import src.utils_measure as utils
+
 
 def measure_shadow(T,number_qubits):
     
@@ -76,13 +78,13 @@ for qubit in number_qubits:
     #psi_in = np.ones(tuple(2 for _ in range(qubit)), dtype=complex)/2./np.sqrt(2.) #reshape to 2x2 tensor (each 2x2 matrix describes a single qubit)
     
     #test for a Bell state: 
-    #psi_in = np.zeros(tuple(2 for _ in range(qubit)), dtype=complex)
-    #psi_in[(0,) * (qubit)] = 1./np.sqrt(2.)
-    #psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
+    psi_in = np.zeros(tuple(2 for _ in range(qubit)), dtype=complex)
+    psi_in[(0,) * (qubit)] = 1./np.sqrt(2.)
+    psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
     
     #loaded states by user:
-    psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
-    psi_in = psi_in.astype(np.complex128)
+    #psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
+    #psi_in = psi_in.astype(np.complex128)
 
     rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #changed first to TRUE
     norms = []
@@ -92,30 +94,45 @@ for qubit in number_qubits:
         rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size, qubit)
         norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
         
-    np.set_printoptions(linewidth=200)
-    print("rho initial: ")
-    print(np.around(rho0.reshape(space_size,space_size), 3))
-    print("\n")
-    print("rho reconstructed: ")
-    print(np.around(rho1, 3))
+    #np.set_printoptions(linewidth=200)
+    #print("rho initial: ")
+    #print(np.around(rho0.reshape(space_size,space_size), 3))
+    #print("\n")
+    #print("rho reconstructed: ")
+    #print(np.around(rho1, 3))
         
 
     fig, ax = plt.subplots()
     ax.plot(set_of_T, norms, '-o', label = f"{qubit} qubits")
     ax.set_xscale('log')
+    ax.set_yscale('log')
     # Setting the title
     ax.set_title(f"{qubit} qubits chain ground state")
     # Saving the figure
-    fig.savefig(f'./plots/{qubit}_qubits_shadow_real_chain.png')
+    #fig.savefig(f'./plots/{qubit}_qubits_shadow_real_chain.png')
     
     # Accumulate data for final plot
     all_data.append((set_of_T, norms, f"{qubit} qubits"))
     
     # Create additional plot to show all lines together
     fig, ax = plt.subplots()
+    
     for set_of_T, norms, label in all_data:
+        # Plot the data
         ax.plot(set_of_T, norms, '-o', label=label)
+        
+        # Calculate the slope in log-log space
+        log_set_of_T = np.log10(set_of_T)
+        log_norms = np.log10(norms)
+        slope, intercept, r_value, p_value, std_err = linregress(log_set_of_T, log_norms)
+        
+        # Annotate the slope on the plot
+        x_position = set_of_T[len(set_of_T)//2]  # A middle x-value for positioning the annotation
+        y_position = 10**(intercept + slope*np.log10(x_position))
+        ax.annotate(f'{slope:.2f}', xy=(x_position, y_position), textcoords='offset points', xytext=(0,10), ha='center')
+   
     ax.set_xscale('log')
-    ax.set_title("All qubits together real_chain")
+    ax.set_yscale('log')
+    ax.set_title("All qubits together Bell chain log log")
     ax.legend()  # Display a legend to identify each line
-    fig.savefig('./plots/all_qubits_together_real_chain.png')
+    fig.savefig('./plots/all_qubits_together_Bell_chain_slope.png')
