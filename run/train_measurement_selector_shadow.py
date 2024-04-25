@@ -30,8 +30,8 @@ def main():
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli.basis]
-    basis_matrices_c = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli_c.basis]
-    basis_reconstruction = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli_vector]
+    basis_matrices_c = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli_c.basis] #complementary basis 
+    basis_reconstruction = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli_vector] #3 normal Pauli matrices
 
     def basis_loss_fn(predicted_bases: torch.Tensor) -> torch.Tensor:
         return bases_loss(predicted_bases, torch.stack(basis_matrices), reduction='mean')
