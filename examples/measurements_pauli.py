@@ -62,8 +62,8 @@ print(np.around(rho1, 3))
 '''
 #number_qubits = [2, 3]
 number_qubits = [2, 3, 4, 5, 6, 7, 8, 9, 10]
-set_of_T = [10, 100, 1000, 10000, 100000]
-#set_of_T = [100, 1000, 10000]
+#set_of_T = [10, 100, 1000, 10000, 100000]
+set_of_T = [10, 100, 1000, 10000]
 
 all_data = []
 for qubit in number_qubits:
@@ -84,7 +84,7 @@ for qubit in number_qubits:
     psi_in = np.load(f'./training_states/{qubit}_tensor_ground.npy')
     psi_in = psi_in.astype(np.complex128)
 
-    rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(False,True))
+    rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #changed first to TRUE
     norms = []
     for t in set_of_T: 
         print(f"Start {t}")
@@ -92,10 +92,12 @@ for qubit in number_qubits:
         rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size, qubit)
         norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
         
-        #np.set_printoptions(linewidth=200)
-        #print(np.around(rho0.reshape(space_size,space_size), 3))
-        #print("\n")
-        #print(np.around(rho1, 3))
+    np.set_printoptions(linewidth=200)
+    print("rho initial: ")
+    print(np.around(rho0.reshape(space_size,space_size), 3))
+    print("\n")
+    print("rho reconstructed: ")
+    print(np.around(rho1, 3))
         
 
     fig, ax = plt.subplots()

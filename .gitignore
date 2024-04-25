@@ -5,4 +5,6 @@ test_states/
 /data
 /training_states
 __pycache__
+dictionaty.txt
+/small_data
 
