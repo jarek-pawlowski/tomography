@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.linalg import inv
 
-import QuantumTomography as qLib  # pip install Quantum-Tomography
+#import QuantumTomography as qLib  # pip install Quantum-Tomography
 
 def tensordot(a, b, indices=(1,0), moveaxis=None, conj_tr=(False,False)):
     a1 = np.conjugate(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
@@ -115,8 +115,10 @@ Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
 class Measurement:
     # nice compendium: https://arxiv.org/pdf/2201.07968.pdf
-    def __init__(self, basis, no_qubits):
+    def __init__(self, basis, no_qubits, basis_c=None):
         self.basis = basis.basis
+        if basis_c is not None:
+            self.basis_c = basis_c.basis
         self.no_qubits = no_qubits
 
     def measure_single(self, rho, qubit_index, basis_index, return_state=False):
