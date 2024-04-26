@@ -130,6 +130,7 @@ class Measurement:
         else:
             return prob
         
+        
     def measure_single_pure(self, psi, qubit_index, basis_index, return_state=False):
          # measure single qubit in pure state using given operator 
         Ppsi = psi.copy()
@@ -138,7 +139,15 @@ class Measurement:
         prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
         # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
-            return prob.real, Ppsi/np.sqrt(prob)
+            random = np.random.random()
+            if prob > random: 
+                return 1, Ppsi/np.sqrt(prob)
+            else:
+                Ppsi = psi.copy()
+                Ppsi = tensordot(self.basis_c[basis_index], Ppsi, indices=(1,qubit_index), moveaxis=(0,qubit_index))
+                to_contract = tuple(np.arange(self.no_qubits))
+                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+                return -1, Ppsi/np.sqrt(prob)
         else:
             return prob
 

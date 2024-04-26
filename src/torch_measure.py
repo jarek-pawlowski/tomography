@@ -62,7 +62,7 @@ class Measurement:
             return prob
         
     def measure_single_mixed(self, rho: torch.Tensor, qubit_index: int, basis_matrix: torch.Tensor, basis_matrix_c: torch.Tensor, return_state: bool=False):
-        # measure single qubit in pure state using given operator 
+        # measure single qubit in mixed state using given operator 
         Prho = rho.clone()
         Prho = tensordot(basis_matrix, Prho, indices=([1],[qubit_index]), moveaxis=(0, qubit_index))
         prob = trace(Prho).real

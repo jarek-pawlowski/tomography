@@ -35,14 +35,14 @@ class LSTMMeasurementSelector(nn.Module):
         #self.matrix_reconstructor = LSTMDensityMatrixReconstructor(self.num_qubits + self.basis_dim, num_qubits, layers, hidden_size)  # <- here
 
     def take_snapshot(self, rho_k, measurement_basis_probability_k):
-        # basis matrices now are not RANDOM !!!
+        # basis matrices now are not RANDOM !!! Now LSTM chooses 
         basis_matrices = torch.tensordot(measurement_basis_probability_k.to(torch.complex64), self.basis_matrices, ([1],[0]))  # shape (num_qubits, 2, 2)
         basis_matrices_c = torch.tensordot(measurement_basis_probability_k.to(torch.complex64), self.basis_matrices_c, ([1],[0]))
         # take a snapshot
         snapshot = []
         p = rho_k.clone()
         for i in range(self.num_qubits):
-            s, p = self.measurement.measure_single_mixed(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True)
+            s, p = self.measurement.measure_single_mixed(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
             snapshot.append(s)
         return snapshot
 
@@ -59,7 +59,7 @@ class LSTMMeasurementSelector(nn.Module):
         
         for i in range(self.max_num_snapshots - 1):  # in our case max_num_measurements = the number of snapshots
             # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
-            h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i))
+            h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i)) #LSTM cell to select basis
             # projector -> simple single-layer perceptron that predicts Pauli selections from LSTM's hidden representation
             measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
             # now make measuremets
