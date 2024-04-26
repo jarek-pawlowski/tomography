@@ -41,8 +41,9 @@ class LSTMMeasurementSelector(nn.Module):
         # take a snapshot
         snapshot = []
         p = rho_k.clone()
+        #print(p)
         for i in range(self.num_qubits):
-            s, p = self.measurement.measure_single_mixed(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
+            s, p = self.measurement.measure_single_pure(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
             snapshot.append(s)
         return snapshot
 

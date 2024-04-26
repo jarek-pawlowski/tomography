@@ -16,16 +16,17 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
     
 def main():
     # load data
+    num_qubits = 4
     batch_size = 128
-    train_dataset = MeasurementDataset(root_path='./small_data/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(root_path='./small_data/train/', return_density_matrix=True)
+    train_dataset = MeasurementDataset(num_qubits, root_path='./training_states/train/', return_density_matrix=True)
+    test_dataset = MeasurementDataset(num_qubits, root_path='./training_states/train/', return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # create model
-    model_name = 'full_lstm_basis_selector_v3_Pauli_basis_loss'
+    model_name = 'full_lstm_basis_selector_v3_Pauli_basis_loss_heisenberg'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -37,7 +38,7 @@ def main():
         return bases_loss(predicted_bases, torch.stack(basis_matrices), reduction='mean')
     
     model_params = {
-        'num_qubits': 2,
+        'num_qubits': num_qubits,
         'basis_matrices': basis_matrices, # 'Pauli' basis matrices
         'basis_matrices_c': basis_matrices_c, # 'Pauli complementary' basis matrices
         'basis_reconstruction': basis_reconstruction,
@@ -51,7 +52,7 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 10
+    num_epochs = 20
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
     criterions = {

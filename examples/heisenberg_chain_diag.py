@@ -11,6 +11,7 @@ from functools import reduce
 from itertools import chain, product
 import os 
 import math
+import src.utils_measure as utils
 #my .py files
 
 class Heisenberg(object):
@@ -173,14 +174,14 @@ class Heisenberg(object):
         return subsystem_A, subsystem_B, new_basis
     
     
-    def create_Hamiltonian(self, adjMatrix):
+    def create_Hamiltonian(self, J , adjMatrix):
         #definition of S matrices and diagonalization
 
         #using adjacency matrix to define neighbouring sites
         for i in range(len(adjMatrix)):
             for j in range(len(adjMatrix)):
                 if adjMatrix[j][i] == 1:
-                    self.H += 1/2 * (np.dot(self.S_site(j, self.S_plus),self.S_site(i, self.S_minus)) \
+                    self.H += 1/2 * J * (np.dot(self.S_site(j, self.S_plus),self.S_site(i, self.S_minus)) \
                     + np.dot(self.S_site(j, self.S_minus),self.S_site(i, self.S_plus))) \
                     + np.dot(self.S_site(j, self.S_z), self.S_site(i, self.S_z))
         
@@ -304,8 +305,8 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
-
-size_of_the_chain = 3
+        
+size_of_the_chain = 4
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
 adjMatrix[-1][0] = 0
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])
@@ -320,38 +321,63 @@ print("Start the diagonalization")
 
 basis_H, basis_H_s_z, spins = H.calculate_basis()
 
-H.create_Hamiltonian(adjMatrix)
+#J a random number form 0.01 to 1.0 
+#J = 1.0
+J = np.random.uniform(-1.0, 1.0)
+print(f"J equals = {J}")
+H.create_Hamiltonian(J, adjMatrix)
 
 energies, vectors = H.eig_diagonalize_Heisenberg()
 
 #find a ground state and save its coresponding eigenvector as a tensor
+#ground_state_index = np.argmin(energies)
+#ground_state_energy = energies[ground_state_index]
+#ground_state_vector = vectors[:, ground_state_index]
 
-ground_state_index = np.argmin(energies)
-ground_state_energy = energies[ground_state_index]
-ground_state_vector = vectors[:, ground_state_index]
+#tensor = ground_state_vector.reshape(tuple(2 for _ in range(size_of_the_chain)))
+#filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
+#np.save(filename, tensor)
 
-tensor = ground_state_vector.reshape(tuple(2 for _ in range(size_of_the_chain)))
-filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
-np.save(filename, tensor)
 
-'''
-for j in range(len(energies)):
+#for j in range(len(energies)):
     
-    print(f"Eigenvectors for this spin: {vectors[:,j]}")
-    print(f"This is energy {energies[j]}")   
+    #print(f"Eigenvectors for this spin: {vectors[:,j]}")
+    #print(f"This is energy {energies[j]}")   
             
     # Reshape the vector into a 2x2 tensor
-    tensor = vectors[:,j].reshape(tuple(2 for _ in range(size_of_the_chain)))
+    #tensor = vectors[:,j].reshape(tuple(2 for _ in range(size_of_the_chain)))
+    #Jarek's tensordot used in the shadow calculations
+    #density_matrix = utils.tensordot(vectors[:,j], vectors[:,j], indices=0, conj_tr=(True,True))
+    
     # Now, save this tensor to a .npy file
-    eigenenergy_str = "{:.3f}".format(energies[j])
-    filename = f'./training_states/{j}_tensor.npy'
-    np.save(filename, tensor)
-'''
+    #eigenenergy_str = "{:.3f}".format(energies[j])
+    #filename = f'./training_states/density_matrix_{j}.npy'
+    #np.save(filename, density_matrix)
 
+#print(density_matrix)
 # To verify, let's load the file and print the tensor
-loaded_tensor = np.load(f'./training_states/{size_of_the_chain}_tensor_ground.npy')
-print(loaded_tensor)
-print(loaded_tensor.dtype)
+#loaded_tensor = np.load(f'./training_states/{size_of_the_chain}_tensor_ground.npy')
+#print(loaded_tensor)
+#print(loaded_tensor.dtype)
 
 print("Success")
 
+with open("training_states/train/dictionary.txt", "w") as file:
+    for i in range(10):
+    
+        J = np.random.uniform(-1.0, 1.0)
+        print(f"J equals = {J}")
+        H.create_Hamiltonian(J, adjMatrix)
+        energies, vectors = H.eig_diagonalize_Heisenberg()
+        
+        for j in range(len(energies)):
+            #print(f"Eigenvectors for this spin: {vectors[:,j]}")
+            #print(f"This is energy {energies[j]}")   
+            density_matrix = utils.tensordot(vectors[:,j], vectors[:,j], indices=0, conj_tr=(True,True))
+            filename = f'./training_states/train/matrices/dens{i}{j}.npy'
+            np.save(filename, density_matrix)
+            
+            file.write(f"dens{i}{j}, {J}\n")
+            #print(density_matrix)
+file.close()
+print("Success loop")

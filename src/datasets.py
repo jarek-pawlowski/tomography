@@ -65,8 +65,9 @@ class VectorDensityMatrixDataset(DensityMatrixDataset):
 
 
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False, mask_measurements: t.Optional[t.List] = None) -> None:
+    def __init__(self, num_qubits: int, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False, mask_measurements: t.Optional[t.List] = None) -> None:
         super().__init__(root_path)
+        self.num_qubits = num_qubits
         self.measurement = Measurement(Kwiat, 2)
         self.return_density_matrix = return_density_matrix
         self.binary_label = binary_label
@@ -80,7 +81,7 @@ class MeasurementDataset(DensityMatrixDataset):
         rho = self.convert_numpy_matrix_to_tensor(matrix)
 
         # reshape density matrix from (4, 4) to (2, 2, 2, 2)
-        matrix = matrix.reshape((2, 2, 2, 2))
+        matrix = matrix.reshape(tuple(2 for _ in range(2*self.num_qubits)))
         measurements = self._get_all_measurements(matrix)
         if self.mask_measurements is not None:
             measurements = np.array([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
