@@ -43,7 +43,7 @@ class LSTMMeasurementSelector(nn.Module):
         p = rho_k.clone()
         #print(p)
         for i in range(self.num_qubits):
-            s, p = self.measurement.measure_single_pure(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
+            s, p = self.measurement.measure_single_mixed(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
             snapshot.append(s)
         return snapshot
 
@@ -67,7 +67,7 @@ class LSTMMeasurementSelector(nn.Module):
             snapshot_batch = []
             # iterate over batch (to be paralelized!)
             for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
-                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
+                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2,2]*self.num_qubits)
                 snapshot_batch.append(self.take_snapshot(rho_k, measurement_basis_probability_k))
             snapshot_batch = torch.Tensor(snapshot_batch).to(snapshot.device)
             basis_predictor_input = torch.cat((snapshot_batch, measurement_basis_probability.view(-1, self.basis_dim)), dim=-1)
@@ -96,6 +96,9 @@ class LSTMMeasurementSelector(nn.Module):
         # split each rho into real and imag parts:
         rho_reconstructed = torch.stack([rho_reconstructed.real, rho_reconstructed.imag], dim=1)
         # we return only the final reconstruction -- to be considered later
+        #print(rho[0][0])
+        #print(rho_reconstructed[0][0])
+        
         return [rho_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
 
     def save(self, path: str):

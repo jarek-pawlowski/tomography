@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.datasets import MeasurementDataset
+from src.datasets import MeasurementDataset, MeasurementVectorDataset
 from src.model_shadow import LSTMMeasurementSelector
 from src.torch_utils import train_measurement_predictor, test_measurement_predictor, bases_loss
 from src.logging import log_metrics_to_file, plot_metrics_from_file
@@ -16,10 +16,10 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
     
 def main():
     # load data
-    num_qubits = 4
-    batch_size = 128
-    train_dataset = MeasurementDataset(num_qubits, root_path='./training_states/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(num_qubits, root_path='./training_states/train/', return_density_matrix=True)
+    num_qubits = 2
+    batch_size = 1
+    train_dataset = MeasurementDataset(num_qubits, root_path='./small_data/train/', return_density_matrix=True)
+    test_dataset = MeasurementDataset(num_qubits, root_path='./small_data/train/', return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
@@ -52,7 +52,7 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 20
+    num_epochs = 1
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
     criterions = {

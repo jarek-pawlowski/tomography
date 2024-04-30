@@ -43,32 +43,28 @@ class Measurement:
 
     def measure_single_pure(self, psi: torch.Tensor, qubit_index: int, basis_matrix: torch.Tensor, basis_matrix_c: torch.Tensor, return_state: bool=False):
         # measure single qubit in pure state using given operator 
-        #print(psi)
         Ppsi = psi.clone()
         Ppsi = tensordot(basis_matrix, Ppsi, indices=([1],[qubit_index]), moveaxis=([0],[qubit_index]))
-        #print(Ppsi)
         to_contract = tuple(torch.arange(self.no_qubits))
-        prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,True)).sum().item().real #add sum() to sum over the elements 
+        prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
         # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
             random = torch.rand(1).item()
             if prob > random: 
-                return 1, Ppsi/np.sqrt(prob) #before: torch.sqrt(prob)
+                return 1, Ppsi/np.sqrt(prob) #here changed to np.sqrt(prob) from torch.sqrt(prob)
             else:
                 Ppsi = psi.clone()
                 Ppsi = tensordot(basis_matrix_c, Ppsi, indices=([1],[qubit_index]), moveaxis=([0],[qubit_index]))
                 to_contract = tuple(torch.arange(self.no_qubits))
-                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,True)).sum().item().real
-                return -1, Ppsi/np.sqrt(prob) #before: torch.sqrt(prob)
+                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+                return -1, Ppsi/np.sqrt(prob) #here changed to np.sqrt(prob) from torch.sqrt(prob)
         else:
             return prob
         
     def measure_single_mixed(self, rho: torch.Tensor, qubit_index: int, basis_matrix: torch.Tensor, basis_matrix_c: torch.Tensor, return_state: bool=False):
         # measure single qubit in mixed state using given operator 
-        #print(rho)
         Prho = rho.clone()
         Prho = tensordot(basis_matrix, Prho, indices=([1],[qubit_index]), moveaxis=(0, qubit_index))
-        #print(Prho)
         prob = trace(Prho).real
         if return_state:
             random = torch.rand(1).item()
