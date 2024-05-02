@@ -81,7 +81,6 @@ class VectorDataset(Dataset):
 
     def read_filename(self, idx):
         filename = f"train/{self.num_qubits}_tensor_state_{idx}.npy"
-        print(idx)
         if not filename.startswith(str(self.num_qubits)):
             #raise ValueError("Wrong filename: check the dataset!")
             print(filename)
