@@ -48,6 +48,7 @@ class Measurement:
         to_contract = tuple(torch.arange(self.no_qubits))
         prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
         # to_contract[::-1] because transposing reverses tensor indices
+        #print(f"This is {prob}")
         if return_state:
             random = torch.rand(1).item()
             if prob > random: 

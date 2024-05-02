@@ -18,8 +18,8 @@ def main():
     # load data
     num_qubits = 2
     batch_size = 1
-    train_dataset = MeasurementDataset(num_qubits, root_path='./small_data/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(num_qubits, root_path='./small_data/train/', return_density_matrix=True)
+    train_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states/', return_density_matrix=True)
+    test_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states/', return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
@@ -44,7 +44,7 @@ def main():
         'basis_reconstruction': basis_reconstruction,
         'layers': 6,
         'hidden_size': 128,
-        'max_num_snapshots': 100,
+        'max_num_snapshots': 1000,
         'device': device
     }
     model = LSTMMeasurementSelector(**model_params)
@@ -52,7 +52,7 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 1
+    num_epochs = 2
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
     criterions = {

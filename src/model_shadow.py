@@ -43,7 +43,7 @@ class LSTMMeasurementSelector(nn.Module):
         p = rho_k.clone()
         #print(p)
         for i in range(self.num_qubits):
-            s, p = self.measurement.measure_single_mixed(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
+            s, p = self.measurement.measure_single_pure(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
             snapshot.append(s)
         return snapshot
 
@@ -66,8 +66,10 @@ class LSTMMeasurementSelector(nn.Module):
             # now make measuremets
             snapshot_batch = []
             # iterate over batch (to be paralelized!)
+            #print(rho)
             for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
-                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2,2]*self.num_qubits)
+                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*self.num_qubits) #2 more
+                #print(rho_k)
                 snapshot_batch.append(self.take_snapshot(rho_k, measurement_basis_probability_k))
             snapshot_batch = torch.Tensor(snapshot_batch).to(snapshot.device)
             basis_predictor_input = torch.cat((snapshot_batch, measurement_basis_probability.view(-1, self.basis_dim)), dim=-1)
@@ -77,7 +79,7 @@ class LSTMMeasurementSelector(nn.Module):
         # unfold over snapshots
         rho_reconstructed = []
         for snapshot_with_basis in snapshots_with_basis_vector:
-            rho_reconstructed_s = torch.zeros(rho.shape[0], rho.shape[-2], rho.shape[-1]).to(torch.complex64).to(self.device)
+            rho_reconstructed_s = torch.zeros(rho.shape[0], rho.shape[-1], rho.shape[-1]).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
             measurement_shadow = snapshot_with_basis[:,:self.num_qubits]
             basis_vectors = snapshot_with_basis[:,self.num_qubits:].view(-1, self.num_qubits, self.basis_size)
             basis = torch.tensordot(basis_vectors.to(torch.complex64), self.basis_reconstruction, ([2],[0]))
@@ -89,6 +91,8 @@ class LSTMMeasurementSelector(nn.Module):
             rho_collection = torch.permute(torch.stack(rho_collection), (1,0,2,3))
             # iterate over batch (to be paralelized!)
             for k, rho_collection_k in enumerate(rho_collection):
+                #print(ft.reduce(torch.kron, rho_collection_k).shape)
+                #print(rho_reconstructed_s[k].shape)
                 rho_reconstructed_s[k] = ft.reduce(torch.kron, rho_collection_k)  # Kronecker product of (multiple) single-qubit rhos 
             rho_reconstructed.append(rho_reconstructed_s)
         # stack everything together:

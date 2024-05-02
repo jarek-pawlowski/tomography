@@ -7,7 +7,7 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
 import matplotlib.pyplot as plt
 
 # Define the path to the training_states directory
-training_states_dir = './training_states'
+training_states_dir = './training_states/'
 num_qubits = 2
 space_size = int(pow(2, num_qubits))
 
@@ -15,7 +15,10 @@ train_dataset = MeasurementVectorDataset(num_qubits, root_path=training_states_d
 
 idx = 0
 vector = train_dataset[idx]
-#print(vector[0])
+print(vector[0])
+print(vector[1])
+print(vector[0][0])
+print(vector[0][1])
 
 measurement = Measurement(num_qubits)
 basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Pauli.basis]
@@ -24,10 +27,11 @@ Pauli_basis_vector = [torch.tensor(basis, dtype=torch.complex64) for basis in Pa
 
 snapshot = []
 psi_in = torch.complex(vector[0][0], vector[0][1]).view(*[2]*num_qubits) #because its a vector
-rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #torch tensordot
+rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,False)) #torch tensordot
 
-
-T = 100
+print(f"This is psi_in {psi_in}")
+print(rho0)
+T = 1000
 #snapshots = measure_shadow_torch(T, num_qubits, psi_in, measurement)
 #rho1 = reconstruct_from_shadow_torch(T, rho0, snapshots, space_size, num_qubits)
 
