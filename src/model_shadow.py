@@ -30,6 +30,7 @@ class LSTMMeasurementSelector(nn.Module):
         self.projectors = nn.ModuleList([nn.Sequential(
             nn.Linear(hidden_size, self.basis_size),
             nn.Softmax(dim=-1)
+            #nn.PReLU()
         ) for _ in range(num_qubits)])
         self.measurement = Measurement(self.num_qubits)
         #self.matrix_reconstructor = LSTMDensityMatrixReconstructor(self.num_qubits + self.basis_dim, num_qubits, layers, hidden_size)  # <- here
@@ -100,8 +101,8 @@ class LSTMMeasurementSelector(nn.Module):
         # split each rho into real and imag parts:
         rho_reconstructed = torch.stack([rho_reconstructed.real, rho_reconstructed.imag], dim=1)
         # we return only the final reconstruction -- to be considered later
-        #print(rho[0][0])
-        #print(rho_reconstructed[0][0])
+        #print(f"rho : {rho[0][0]}")
+        #print(f" rho reconstructed : {rho_reconstructed[0][0]}")
         
         return [rho_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
 
