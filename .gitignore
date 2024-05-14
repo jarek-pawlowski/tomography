@@ -4,4 +4,5 @@ test_states/
 /logs
 /plots
 /results
+/derandomized_test
 __pycache__
