@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from src.torch_measure import Measurement
+from src.torch_utils import tensordot
 
 
 class LSTMMeasurementSelector(nn.Module):
@@ -37,15 +38,40 @@ class LSTMMeasurementSelector(nn.Module):
 
     def take_snapshot(self, rho_k, measurement_basis_probability_k):
         # basis matrices now are not RANDOM !!! Now LSTM chooses 
-        basis_matrices = torch.tensordot(measurement_basis_probability_k.to(torch.complex64), self.basis_matrices, ([1],[0]))  # shape (num_qubits, 2, 2)
-        basis_matrices_c = torch.tensordot(measurement_basis_probability_k.to(torch.complex64), self.basis_matrices_c, ([1],[0]))
+        
         # take a snapshot
         snapshot = []
         p = rho_k.clone()
         #print(p)
+        #print(measurement_basis_probability_k)
         for i in range(self.num_qubits):
-            s, p = self.measurement.measure_single_pure(p, i, basis_matrices[i], basis_matrices_c[i], return_state=True) #should be pure!
+            
+            #normalised eigenvectoris from a1, a2, a3 probabilities from LSTM 
+            # https://en.wikipedia.org/wiki/Pauli_matrices#Pauli_vectors
+            a_vector_norm = torch.norm(torch.tensor([measurement_basis_probability_k[i][0], measurement_basis_probability_k[i][1], measurement_basis_probability_k[i][2]], dtype=torch.complex64))
+            
+            norm_psi_plus = 1/torch.sqrt((2*a_vector_norm*(measurement_basis_probability_k[i][2]*a_vector_norm)))
+            norm_psi_minus = 1/torch.sqrt((2*a_vector_norm*(measurement_basis_probability_k[i][2]*a_vector_norm)))
+    
+            psi_plus = norm_psi_plus * torch.tensor([measurement_basis_probability_k[i][2] + a_vector_norm, measurement_basis_probability_k[i][0] + 1j * measurement_basis_probability_k[i][1]], dtype=torch.complex64)
+            psi_minus = norm_psi_minus * torch.tensor([1j*measurement_basis_probability_k[i][1] - measurement_basis_probability_k[i][0], measurement_basis_probability_k[i][2] + a_vector_norm], dtype=torch.complex64)
+            
+            #print(a_vector_norm)
+            #print(psi_plus)
+            #print(psi_minus)            
+            
+            #construction of measurment projector from eigenvectors and complementary one
+            basis_matrix = tensordot(psi_plus, psi_plus, indices=([], []), conj_tr=(False,True))  # shape (num_qubits, 2, 2)
+            basis_matrix_c = tensordot(psi_minus, psi_minus, indices=([], []), conj_tr=(False,True))
+            
+            #print(p)
+            #print(basis_matrix)
+            #print(basis_matrix_c)
+            
+        
+            s, p = self.measurement.measure_single_pure(p, i, basis_matrix, basis_matrix_c, return_state=True)
             snapshot.append(s)
+            
         return snapshot
 
     def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
@@ -64,7 +90,7 @@ class LSTMMeasurementSelector(nn.Module):
             h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i)) #LSTM cell to select basis
             # projector -> simple single-layer perceptron that predicts Pauli selections from LSTM's hidden representation
             measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
-            # now make measuremets
+            # now make measurements
             snapshot_batch = []
             # iterate over batch (to be paralelized!)
             #print(rho)
