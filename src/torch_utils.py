@@ -86,11 +86,14 @@ def train_discrete_measurement_selector(
     model: nn.Module,
     device: torch.device, 
     train_loader: DataLoader, 
-    optimizer: Optimizer, 
+    reconstructor_optimizer: Optimizer, 
+    selector_optimizer: Optimizer, 
     epoch: int, 
     log_interval: int = 100, 
     reconstructor_criterion: t.Callable = nn.MSELoss(),
-    selector_criterion: t.Callable = nn.MSELoss(reduction='none'),
+    selector_criterion: t.Callable = nn.CrossEntropyLoss(),
+    num_reconstructor_repeats: int = 1,
+    num_selector_repeats: int = 1,
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
@@ -102,35 +105,50 @@ def train_discrete_measurement_selector(
     ]
     qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
     qubits_bases = torch.stack(qubits_bases)
-    qubits_bases = qubits_bases.unsqueeze(0).expand(train_loader.batch_size, -1, -1, -1, -1)
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
     for batch_idx, (rho, measurement, _) in pbar:
         rho, measurement = rho.to(device), measurement.to(device)
-        optimizer.zero_grad()
+        qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
 
         measurement_with_basis = [
-            (measurement[:, i:i+1], qubits_bases[:, i])
+            (measurement[:, i:i+1], qubits_bases_batch[:, i])
             for i in range(measurement.shape[1])
         ]
-        predicted_best_rhos, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho)
-        reconstructor_loss = torch.zeros(1).to(device)
-        selector_loss = torch.zeros(1).to(device)
-        for i in range(predicted_best_rhos.shape[1]):
-            reconstructor_loss += reconstructor_criterion(predicted_best_rhos[:, i], rho)
-            probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[:, i, j] for j in range(predicted_bases_probabilities.shape[2])])
-            selector_loss_i = probabilites.view(-1, probabilites.shape[1], 1, 1, 1) * selector_criterion(predicted_all_rhos[:, i], rho.unsqueeze(1).expand(-1, predicted_all_rhos.shape[2], *rho.shape[1:])).detach()
-            selector_loss += selector_loss_i.sum(dim=1).mean()
 
-        reconstructor_loss.backward()
-        selector_loss.backward()
-        optimizer.step()
-        metrics['reconstructor_train_loss'] += reconstructor_loss.item()
-        metrics['selector_train_loss'] += selector_loss.item()
+        for _ in range(num_selector_repeats):
+            selector_optimizer.zero_grad()
+            _, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho)
+            selector_loss = torch.zeros(1).to(device)
+            for i in range(1, predicted_bases_probabilities.shape[1]):
+                probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[:, i, j] for j in range(predicted_bases_probabilities.shape[2])])
+                reconstruction_losses = torch.nn.functional.mse_loss(predicted_all_rhos[:, i, 1:], rho.unsqueeze(1).expand(-1, predicted_all_rhos.shape[2] - 1, *rho.shape[1:]), reduction='none') # skipping the first basis as it is always chosen as the first measurement
+                mean_reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
+                mean_reconstruction_losses_with_noise = mean_reconstruction_losses + torch.randn_like(mean_reconstruction_losses) * 1e-3
+                best_measurement_ids = torch.argmin(mean_reconstruction_losses_with_noise, dim=1).detach() + 1  # shifting by 1 as the first measurement is skipped
+                selector_loss_i = selector_criterion(input=probabilites, target=best_measurement_ids)
+                selector_loss += selector_loss_i
+                
+            selector_loss.backward()
+            selector_optimizer.step()
+            metrics['selector_train_loss'] += selector_loss.item()
+
+
+        for _ in range(num_reconstructor_repeats):
+            reconstructor_optimizer.zero_grad()
+            predicted_best_rhos, _, _ = model(measurement_with_basis, rho)
+            reconstructor_loss = torch.zeros(1).to(device)
+            for i in range(predicted_best_rhos.shape[1]):
+                reconstructor_loss += reconstructor_criterion(predicted_best_rhos[:, i], rho)
+
+            reconstructor_loss.backward()
+            reconstructor_optimizer.step()
+            metrics['reconstructor_train_loss'] += reconstructor_loss.item()
+
         if batch_idx % log_interval == 0:
             pbar.set_postfix({'reconstructor_loss': reconstructor_loss.item(), 'selector_loss': selector_loss.item()})
-    metrics['reconstructor_train_loss'] /= len(train_loader)
-    metrics['selector_train_loss'] /= len(train_loader)
+    metrics['reconstructor_train_loss'] /= num_reconstructor_repeats * len(train_loader)
+    metrics['selector_train_loss'] /= num_selector_repeats * len(train_loader)
     return metrics
 
 
@@ -203,14 +221,14 @@ def test_discrete_measurement_selector(
     ]
     qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
     qubits_bases = torch.stack(qubits_bases)
-    qubits_bases = qubits_bases.unsqueeze(0).expand(test_loader.batch_size, -1, -1, -1, -1)
     
     metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
     with torch.no_grad():
         for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
             rho, measurement = rho.to(device), measurement.to(device)
+            qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
             measurement_with_basis = [
-                (measurement[:, i:i+1], qubits_bases[:, i])
+                (measurement[:, i:i+1], qubits_bases_batch[:, i])
                 for i in range(measurement.shape[1])
             ]
             predicted_best_rhos, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho)

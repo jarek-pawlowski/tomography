@@ -356,7 +356,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
             nn.Linear(hidden_size, len(self.bases)),
             nn.Softmax(dim=-1)
         ) for _ in range(num_qubits)])
-        self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
+        self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size, bias=True)
 
     def forward(self, all_measurements: t.List[t.Tuple[torch.Tensor, torch.Tensor]], rho: torch.Tensor):
         target_measurements_with_basis = []
@@ -415,7 +415,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
 
         predicted_bases_probabilites = torch.stack(predicted_bases_probabilites, dim=1) # shape (batch, max_num_measurements, num_qubits, len(bases))
         predicted_measurements_with_basis = torch.stack(predicted_measurements_with_basis, dim=1)
-        predicted_measurements_matrices = self.matrix_reconstructor(predicted_measurements_with_basis.detach()) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
+        predicted_measurements_matrices = self.matrix_reconstructor(predicted_measurements_with_basis) #.detach()) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
         total_target_measurements_matrices = torch.stack(total_target_measurements_matrices, dim=1) # shape (batch, max_num_measurements, len(all_measurements), 2, 2**num_qubits, 2**num_qubits)
         return predicted_measurements_matrices, predicted_bases_probabilites, total_target_measurements_matrices
 
@@ -437,10 +437,18 @@ class DensityMatrixReconstructor(nn.Module):
     
 
 class LSTMDensityMatrixReconstructor(nn.Module):
-    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16):
+    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16, bias: bool = True):
         super(LSTMDensityMatrixReconstructor, self).__init__()
         self.num_qubits = num_qubits
-        self.lstm = nn.LSTM(input_dim, hidden_size, layers, proj_size=2 * (4 ** num_qubits), batch_first=True)
+        self.lstm = nn.LSTM(input_dim, hidden_size, layers, proj_size=2 * (4 ** num_qubits), batch_first=True, bias=bias)
+
+    def reinitialize(self):
+        for name, p in self.named_parameters():
+            if 'lstm' in name:
+                if 'weight_ih' in name:
+                    nn.init.xavier_uniform_(p.data)
+                elif 'weight_hh' in name:
+                    nn.init.orthogonal_(p.data)
 
     def forward(self, measurements_with_basis: torch.Tensor):
         out, _ = self.lstm(measurements_with_basis)

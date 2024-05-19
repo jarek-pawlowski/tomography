@@ -105,8 +105,39 @@ def plot_map_from_files(
     save_path: t.Optional[str] = None,
     values_range: t.Optional[t.Tuple[float, float]] = None
 ):
+    metrics_values_for_xvalue = []
+    for i in range(*range_):
+        log_path = f'{path_common_prefix}{i}.log'
+        metrics = load_metrics_from_file(log_path)
+        metrics_values = metrics[metric_name]
+        xvalues = metrics[xaxis]
+        idx = (np.abs(xvalues - xvalue)).argmin()
+        metric_value = metrics_values[idx]
+        metrics_values_for_xvalue.append(metric_value)
+    plot_error_map(metrics_values_for_xvalue, save_path, values_range, title=f'{metric_name} for {xaxis}={xvalue}')
+
+
+def plot_map_from_file(
+    path_to_file: str,
+    metric_name: str,
+    save_path: t.Optional[str] = None,
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+    title: str = '',
+):
+    metrics = load_metrics_from_file(path_to_file)
+    metrics_values = metrics[metric_name]
+    plot_error_map(metrics_values, save_path, values_range, title=title)
+
+
+def plot_error_map(
+    metrics_values: np.ndarray,
+    save_path: t.Optional[str] = None,
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+    title: str = '',
+):
+
     # plot matrix of metrics values for each file in range_ and value closest to xvalue
-    matrix_dim = int(sqrt(range_[1]))
+    matrix_dim = int(sqrt(len(metrics_values)))
     fig, axes = plt.subplots(matrix_dim, matrix_dim, figsize=(10, 10))
     cmap = plt.get_cmap('viridis')
     if values_range is not None:
@@ -115,14 +146,7 @@ def plot_map_from_files(
         norm = plt.Normalize()
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 
-    for i in range(*range_):
-        log_path = f'{path_common_prefix}{i}.log'
-        metrics = load_metrics_from_file(log_path)
-        metrics_values = metrics[metric_name]
-        xvalues = metrics[xaxis]
-        idx = (np.abs(xvalues - xvalue)).argmin()
-        metric_value = metrics_values[idx]
-
+    for i, metric_value in enumerate(metrics_values):
         # plot metric value as a subplot square in matrix
         # use color palette to set color according to metric value
         # also plot the text value of the metric in the center of the square
@@ -141,19 +165,54 @@ def plot_map_from_files(
         # axes.flat[i].yaxis.set_visible(False)
         axes.flat[i].imshow([[color]])
         axes.flat[i].label_outer()
-
-    # Set common xticks and yticks for subplots
-    for ax in axes.flat:
-        ax.label_outer()
         
-
     # show color bar on the global plot
     fig.subplots_adjust(wspace=0.1, hspace=0.01, right=0.8)
     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
     fig.colorbar(sm, cax=cbar_ax)
-    plt.suptitle(f'{metric_name} for {xaxis}={xvalue}')
+    plt.suptitle(title, fontsize=20)
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.show()
+    plt.close()
+
+
+def plot_matrices(
+    matrices: np.ndarray,
+    save_path: str,
+    title: str = '',
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+):
+    # plot matrix of metrics values for each file in range_ and value closest to xvalue
+    matrix_dim = int(sqrt(len(matrices)))
+    fig, axes = plt.subplots(matrix_dim, matrix_dim, figsize=(10, 10))
+
+    cmap = plt.get_cmap('viridis')
+    if values_range is not None:
+        norm = plt.Normalize(vmin=values_range[0], vmax=values_range[1])
+    else:
+        norm = plt.Normalize()
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    for i, matrix in enumerate(matrices):
+        matrix_map = cmap(norm(matrix))
+
+        axes.flat[i].imshow(matrix_map)
+        axes.flat[i].set_xticks([0]) 
+        axes.flat[i].set_xticklabels([i % matrix_dim])
+        axes.flat[i].set_yticks([0]) 
+        axes.flat[i].set_yticklabels([floor(i / matrix_dim)])
+        axes.flat[i].grid(False)
+        # axes.flat[i].xaxis.set_visible(False)
+        # axes.flat[i].yaxis.set_visible(False)
+        axes.flat[i].label_outer()
+        
+    fig.subplots_adjust(wspace=0.1, hspace=0.01, right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(sm, cax=cbar_ax)
+    plt.suptitle(title, fontsize=20)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
     plt.close()

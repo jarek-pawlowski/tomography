@@ -16,14 +16,14 @@ from src.utils_measure import Kwiat
     
 def main():
     # load data
-    batch_size = 128
+    batch_size = 64
     train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True)
     test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'discrete_lstm_basis_selector_kwiat_basis'
+    model_name = 'discrete_lstm_basis_selector_reduced_kwiat_basis_cross_entropy_loss'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -42,9 +42,10 @@ def main():
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    reconstructor_optimizer = optim.Adam(model.matrix_reconstructor.parameters(), lr=0.001)
+    selector_optimizer = optim.Adam(list(model.measurement_selector.parameters()) + list(model.projectors.parameters()), lr=0.001)
     criterion = nn.MSELoss()
-    criterion_not_reduced = nn.MSELoss(reduction='none')
+    selector_criterion = nn.CrossEntropyLoss()
     criterions = {
         'test_loss': criterion
     }
@@ -52,7 +53,7 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_discrete_measurement_selector(model, device, train_loader, optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=criterion_not_reduced, log_interval=10)
+        train_metrics = train_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1)
         test_metrics = test_discrete_measurement_selector(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss']['measurement 15'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']['measurement 15']

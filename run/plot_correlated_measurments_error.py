@@ -19,6 +19,7 @@ def main():
     log_path_kwiat_basis_lin_comb_lstm = './logs/full_lstm_basis_selector_v3_kwiat_basis_loss_meauremnt_dependence.log'
     log_path_lin_comb_lstm = './logs/full_lstm_basis_selector_v3_meauremnt_dependence.log'
     log_path_kwiat_basis_lstm = './logs/full_lstm_measure_basis_kwiat_basis_loss_meauremnt_dependence.log'
+    log_path_discrete_kwiat_basis_lstm = './logs/discrete_lstm_basis_selector_reduced_kwiat_basis_cross_entropy_loss_measuremnt_dependence.log'
     log_path_tomography = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped.log'
     log_path_zeroed_tomography = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_zeroed_tomography.log'
     log_path_mle_intensity = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized_intensity.log'
@@ -29,6 +30,7 @@ def main():
     metrics_lstm = load_metrics_from_file(log_path_lstm)
     metrics_smp = load_metrics_from_file(log_path_smp)
     metrics_kwiat_basis_lstm = load_metrics_from_file(log_path_kwiat_basis_lstm)
+    metrics_discrete_kwiat_basis_lstm = load_metrics_from_file(log_path_discrete_kwiat_basis_lstm)
     metrics_lin_comb_lstm = load_metrics_from_file(log_path_lin_comb_lstm)
     metrics_kwiat_basis_lin_comb_lstm = load_metrics_from_file(log_path_kwiat_basis_lin_comb_lstm)
     metrics_tomography = load_metrics_from_file(log_path_tomography)
@@ -50,11 +52,12 @@ def main():
     mle_fixed_metrics = np.flip(mle_fixed_metrics)[1:]
 
     # plot
-    plt.plot(np.arange(1, 17), metrics_lstm['bures_distance'], label='Arbitrary basis LSTM')
     plt.plot(np.arange(1, 17), metrics_smp['bures_distance'], label='Arbitrary basis fully connected NN')
-    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm['bures_distance'], label='LSTM with Kwiat basis loss')
-    plt.plot(np.arange(1, 17), metrics_lin_comb_lstm['bures_distance'], label='LSTM with linear combination of arbitrary basis')
+    plt.plot(np.arange(1, 17), metrics_lstm['bures_distance'], label='Arbitrary basis LSTM')
+    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm['bures_distance'], label='Arbitrary basis LSTM with Kwiat basis loss')
+    plt.plot(np.arange(1, 17), metrics_lin_comb_lstm['bures_distance'], label='LSTM with linear combination of Kwiat basis')
     plt.plot(np.arange(1, 17), metrics_kwiat_basis_lin_comb_lstm['bures_distance'], label='LSTM with linear combination of Kwiat basis and loss')
+    plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm['bures_distance'], label='LSTM from discrete Kwiat basis')
     plt.plot(np.arange(1, 17), tomography_fixed_metrics, label='Kwiat basis tomography')
     plt.plot(np.arange(1, 17), zeroed_tomography_fixed_metrics, label='Kwiat basis tomography with zeroed measurements')
     plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, label='Kwiat basis MLE with intensity')
