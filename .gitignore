@@ -5,6 +5,8 @@ test_states/
 /data
 /small_data
 /training_states
+/results
+/derandomized_test
 __pycache__
 *.joblib
 *.ipynb

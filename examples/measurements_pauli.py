@@ -6,9 +6,14 @@ import src.utils_measure as utils
 
 number_qubits = 3
 space_size = int(pow(2, number_qubits))
-measurement = utils.Measurement(utils.Pauli, number_qubits)
-              
-psi_in = np.ones((2,2,2), dtype=complex)/2./np.sqrt(2.) #reshape do tensora 2x2
+measurement = utils.Measurement(utils.Pauli, number_qubits, basis_c=utils.Pauli_c)
+ 
+#psi_in = np.ones((2,2,2), dtype=complex)/2./np.sqrt(2.) #reshape do tensora 2x2x2
+# test dla Bella
+psi_in = np.zeros((2,2,2), dtype=complex)
+psi_in[0,0,0] = 1./np.sqrt(2.)
+psi_in[1,1,1] = 1./np.sqrt(2.)
+
 
 T = 10000
 snapshots = []
@@ -20,12 +25,8 @@ for t in range(T):
     for i in range(number_qubits):
         basis_index = np.random.randint(len(measurement.basis))
         m, p = measurement.measure_single_pure(p, i, basis_index = basis_index, return_state=True)
-        random = np.random.random()
         basis.append(basis_index)
-        if m > random: 
-            measurement_shadow.append(1.)
-        else:
-            measurement_shadow.append(-1.)
+        measurement_shadow.append(m)
     snapshots.append([basis, measurement_shadow])
     
 # now try to reconstruct the state
@@ -44,5 +45,3 @@ rho1 /= T
 np.set_printoptions(linewidth=200)
 print(np.around(rho0.reshape(space_size,space_size), 3))
 print(np.around(rho1, 3))
-
-#test dla bella potem 

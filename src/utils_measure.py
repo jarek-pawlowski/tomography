@@ -91,6 +91,7 @@ class States:
             self.L = np.array([[1],[1j]])/np.sqrt(2)
             self.R = np.array([[1],[-1j]])/np.sqrt(2)
             self.D = np.array([[1],[1]])/np.sqrt(2)
+            self.Db = np.array([[1],[-1]])/np.sqrt(2)
         
     
 class Basis:
@@ -107,14 +108,24 @@ Kwiat = Basis([tensordot(states.H, states.H, conj_tr=(False,True)),
 Pauli = Basis([tensordot(states.D, states.D, conj_tr=(False,True)),
                tensordot(states.L, states.L, conj_tr=(False,True)),
                tensordot(states.H, states.H, conj_tr=(False,True))])
+Pauli_c = Basis([tensordot(states.Db, states.Db, conj_tr=(False,True)),
+                 tensordot(states.R, states.R, conj_tr=(False,True)),
+                 tensordot(states.V, states.V, conj_tr=(False,True))])
+
+Stokes = Basis([np.array([[1,0],[0,1]]),
+                np.array([[1,1],[1,1]])*.5,
+                np.array([[1,-1j],[1j,1]])*.5,
+                np.array([[1,0],[0,0]])])
 
 Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
 
 
 class Measurement:
     # nice compendium: https://arxiv.org/pdf/2201.07968.pdf
-    def __init__(self, basis, no_qubits):
+    def __init__(self, basis, no_qubits, basis_c=None):
         self.basis = basis.basis
+        if basis_c is not None:
+            self.basis_c = basis_c.basis
         self.no_qubits = no_qubits
 
     def measure_single(self, rho, qubit_index, basis_index, return_state=False):
@@ -136,7 +147,15 @@ class Measurement:
         prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
         # to_contract[::-1] because transposing reverses tensor indices
         if return_state:
-            return prob.real, Ppsi/np.sqrt(prob)
+            random = np.random.random()
+            if prob > random: 
+                return 1, Ppsi/np.sqrt(prob)
+            else:
+                Ppsi = psi.copy()
+                Ppsi = tensordot(self.basis_c[basis_index], Ppsi, indices=(1,qubit_index), moveaxis=(0,qubit_index))
+                to_contract = tuple(np.arange(self.no_qubits))
+                prob = tensordot(psi, Ppsi, indices=(to_contract[::-1], to_contract), conj_tr=(True,False)).item().real
+                return -1, Ppsi/np.sqrt(prob)
         else:
             return prob
 
@@ -186,3 +205,51 @@ class Kwiat_library:
             input.append([1., 0, 0, m, *b])
         [rho_approx, intensity, fval] = self.tomolib.state_tomography(np.array(input), intensity, method=method)
         return rho_approx
+
+
+class X_states:
+    # compendium: https://arxiv.org/pdf/1207.3689.pdf   
+    def __init__(self, std=1.):
+        self.std = std 
+    def fano(self, a3, b3, c1, c2, c3):
+        X = np.zeros((4,4), dtype=complex)
+        X += G16+G12*a3+G3*b3+G5*c1+G10*c2+G15*c3
+        return X/2
+    def randomize(self, A3=None, B3=None, C1=None, C2=None, C3=None):
+        a3 = np.random.normal(0., self.std) if A3 is None else A3
+        b3 = np.random.normal(0., self.std) if B3 is None else B3
+        c1 = np.random.normal(0., self.std) if C1 is None else C1
+        c2 = np.random.normal(0., self.std) if C2 is None else C2
+        c3 = np.random.normal(0., self.std) if C3 is None else C3
+        return self.fano(a3, b3, c1, c2, c3)
+    def verify(self, X):
+        if X[0,0] < 0. or X[1,1] < 0. or X[2,2] < 0. or X[3,3] < 0.: return False  
+        if np.abs(X[0,0]+X[1,1]+X[2,2]+X[3,3]-1.) > 1.e-6: return False
+        if abs(X[0,3]) > np.sqrt(X[0,0]*X[3,3]): return False
+        if abs(X[1,2]) > np.sqrt(X[1,1]*X[2,2]): return False
+        return True
+    def generate(self, A3=None, B3=None, C1=None, C2=None, C3=None):
+        while True:
+            X = self.randomize(A3, B3, C1, C2, C3)
+            if self.verify(X): break
+        return X
+    def add_noise(self, X, mu=0., std=.1):
+        while True:
+            [a3,b3,c1,c2,c3] = np.random.normal(mu,std, 5)
+            XN = G12*a3+G3*b3+G5*c1+G10*c2+G15*c3
+            if self.verify(X+XN): break
+        return X+XN
+    def add_noise_r(self, X, mu=0., std=.1):
+        X[0,0] += np.random.normal(mu, std)
+        X[1,1] += np.random.normal(mu, std)
+        X[2,2] += np.random.normal(mu, std)
+        X[3,3] += np.random.normal(mu, std)        
+        noise = np.random.normal(mu, std)
+        X[0,3] += noise
+        X[3,0] += noise 
+        noise = np.random.normal(mu, std)
+        X[1,2] += noise
+        X[2,1] += noise 
+        return X
+    def concurrence(self, X):
+        return np.amax([0, np.abs(X[1,2])-np.sqrt(X[0,0]*X[3,3]), np.abs(X[0,3])-np.sqrt(X[1,1]*X[2,2])])*2
