@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-import utils_measure as utils
+import src.utils_measure as utils
 
 
 ms = utils.Measurement(utils.Kwiat, 2)
