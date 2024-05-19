@@ -3,6 +3,8 @@ test_states/
 /logs
 /plots
 /data
+/small_data
+/training_states
 __pycache__
 *.joblib
 *.ipynb
