@@ -43,32 +43,38 @@ class LSTMMeasurementSelector(nn.Module):
         snapshot = []
         p = rho_k.clone()
         #print(p)
-        #print(measurement_basis_probability_k)
+        #print(f"this is a1 a2 a3 {measurement_basis_probability_k}")
         for i in range(self.num_qubits):
             
+            a1 = measurement_basis_probability_k[i][0]
+            a2 = measurement_basis_probability_k[i][1]
+            a3 = measurement_basis_probability_k[i][2]
+            
+            #print(f"this is a1 a2 a3 {a1} {a2} {a3}")
             #normalised eigenvectoris from a1, a2, a3 probabilities from LSTM 
             # https://en.wikipedia.org/wiki/Pauli_matrices#Pauli_vectors
-            a_vector_norm = torch.norm(torch.tensor([measurement_basis_probability_k[i][0], measurement_basis_probability_k[i][1], measurement_basis_probability_k[i][2]], dtype=torch.complex64))
+            a_vector_norm = torch.norm(torch.tensor([a1, a2, a3], dtype=torch.complex64)) #this must be 1! 
             
-            norm_psi_plus = 1/torch.sqrt((2*a_vector_norm*(measurement_basis_probability_k[i][2]*a_vector_norm)))
-            norm_psi_minus = 1/torch.sqrt((2*a_vector_norm*(measurement_basis_probability_k[i][2]*a_vector_norm)))
+            norm_psi = 1/torch.sqrt((2*a_vector_norm*(a3+a_vector_norm)))
     
-            psi_plus = norm_psi_plus * torch.tensor([measurement_basis_probability_k[i][2] + a_vector_norm, measurement_basis_probability_k[i][0] + 1j * measurement_basis_probability_k[i][1]], dtype=torch.complex64)
-            psi_minus = norm_psi_minus * torch.tensor([1j*measurement_basis_probability_k[i][1] - measurement_basis_probability_k[i][0], measurement_basis_probability_k[i][2] + a_vector_norm], dtype=torch.complex64)
+            psi_plus = norm_psi * torch.tensor([a3 + a_vector_norm, a1 + 1j * a2], dtype=torch.complex64)
+            psi_minus = norm_psi * torch.tensor([1j*a2 - a1, a3 + a_vector_norm], dtype=torch.complex64)
             
-            #print(a_vector_norm)
-            #print(psi_plus)
-            #print(psi_minus)            
+            #print(f"this is norm: {a_vector_norm}")
+            #print(f"psi plus {psi_plus}")
+            #print(f"psi minus {psi_minus}")            
             
             #construction of measurment projector from eigenvectors and complementary one
             basis_matrix = tensordot(psi_plus, psi_plus, indices=([], []), conj_tr=(False,True))  # shape (num_qubits, 2, 2)
             basis_matrix_c = tensordot(psi_minus, psi_minus, indices=([], []), conj_tr=(False,True))
             
+            #print(f"this is basis_matrix {basis_matrix}")
+            #print(f'this is basis_matrix_c {basis_matrix_c}')
+            
             #print(p)
             #print(basis_matrix)
             #print(basis_matrix_c)
             
-        
             s, p = self.measurement.measure_single_pure(p, i, basis_matrix, basis_matrix_c, return_state=True)
             snapshot.append(s)
             
@@ -90,32 +96,53 @@ class LSTMMeasurementSelector(nn.Module):
             h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i)) #LSTM cell to select basis
             # projector -> simple single-layer perceptron that predicts Pauli selections from LSTM's hidden representation
             measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
+            #check if it is going to work better with sqrt
+            measurement_basis_probability = torch.sqrt(measurement_basis_probability) #output of LSTM is power of 2 so normalise! 
+
+            
+            #random selection of basis matrices where a_i = 1 and respective ones are 0
+            measurement_basis_probability_not_random = torch.zeros_like(measurement_basis_probability)
+            
+            for i in range(measurement_basis_probability_not_random.shape[0]):
+                for j in range(measurement_basis_probability_not_random.shape[1]):
+                    random_index = torch.randperm(measurement_basis_probability_not_random.shape[2])[0]
+                    measurement_basis_probability_not_random[i][j][random_index] = 1
+                    
+            measurement_basis_probability = measurement_basis_probability_not_random
+            #print(measurement_basis_probability_not_random)
+            
+            
             # now make measurements
             snapshot_batch = []
             # iterate over batch (to be paralelized!)
-            #print(rho)
+            #print(f"this is rho {rho}")
             for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
                 rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*self.num_qubits) #2 more
-                #print(rho_k)
+                #print(f"this is rho_k {rho_k}")
                 snapshot_batch.append(self.take_snapshot(rho_k, measurement_basis_probability_k))
             snapshot_batch = torch.Tensor(snapshot_batch).to(snapshot.device)
             basis_predictor_input = torch.cat((snapshot_batch, measurement_basis_probability.view(-1, self.basis_dim)), dim=-1)
             snapshots_with_basis_vector.append(basis_predictor_input)
             basis_vectors.append(measurement_basis_probability)
+            #sqrt on basis vectors
         # now make the reconstruction
         # unfold over snapshots
+        #print(basis_vectors)
         rho_reconstructed = []
         for snapshot_with_basis in snapshots_with_basis_vector:
-            rho_reconstructed_s = torch.zeros(rho.shape[0], rho.shape[-1], rho.shape[-1]).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
+            rho_reconstructed_s = torch.zeros(rho.shape[0], 2*rho.shape[-1], 2*rho.shape[-2]).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
+            #print(rho_reconstructed_s)
             measurement_shadow = snapshot_with_basis[:,:self.num_qubits]
             basis_vectors = snapshot_with_basis[:,self.num_qubits:].view(-1, self.num_qubits, self.basis_size)
-            basis = torch.tensordot(basis_vectors.to(torch.complex64), self.basis_reconstruction, ([2],[0]))
+            basis = torch.tensordot(basis_vectors.to(torch.complex64), self.basis_reconstruction, ([2],[0])) #combined pauli matrix for reconstruction
             rho_collection = []
             for iq in range(self.num_qubits):
                 rho_collection.append((torch.eye(2).expand(basis.shape[0],-1,-1).to(self.device) + measurement_shadow[:,iq,None,None]*basis[:,iq,:,:]*3)/2.)  # (Eq. A5) in https://arxiv.org/pdf/2106.12627.pdf
             # don't know how to combine ft.reduce with batch
             # poor man's approach:
+            
             rho_collection = torch.permute(torch.stack(rho_collection), (1,0,2,3))
+            #print(f"This is {rho_collection}")
             # iterate over batch (to be paralelized!)
             for k, rho_collection_k in enumerate(rho_collection):
                 #print(ft.reduce(torch.kron, rho_collection_k).shape)
@@ -127,8 +154,8 @@ class LSTMMeasurementSelector(nn.Module):
         # split each rho into real and imag parts:
         rho_reconstructed = torch.stack([rho_reconstructed.real, rho_reconstructed.imag], dim=1)
         # we return only the final reconstruction -- to be considered later
-        #print(f"rho : {rho[0][0]}")
-        #print(f" rho reconstructed : {rho_reconstructed[0][0]}")
+        print(f" rho : {tensordot(rho[0][0], rho[0][0],indices=0, conj_tr=(True,True)).reshape(4,4)}")
+        print(f" rho reconstructed : {rho_reconstructed[0][0]}")
         
         return [rho_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
 

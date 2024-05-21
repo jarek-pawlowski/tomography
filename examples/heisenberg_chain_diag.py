@@ -346,7 +346,7 @@ with open (f'./training_states/dictionary.txt', 'w') as file:
         print(f"This is energy {energies[j]}")   
                 
         # Reshape the vector into a 2x2 tensor
-        tensor = vectors[:,j]#.reshape(tuple(2 for _ in range(size_of_the_chain)))
+        tensor = vectors[:,j].reshape(tuple(2 for _ in range(size_of_the_chain)))
         #Jarek's tensordot used in the shadow calculations
         # density_matrix = utils.tensordot(vectors[:,j], vectors[:,j], indices=0, conj_tr=(True,True))
         

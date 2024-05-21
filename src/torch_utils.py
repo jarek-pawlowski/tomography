@@ -58,8 +58,9 @@ def train_measurement_predictor(
     metrics = {'train_loss': 0, 'bases_loss': 0}
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
     for batch_idx, (rho, measurement, _) in pbar:
-        #print(rho.shape, rho)
-        no_qubits = np.log2(rho.shape[-1]).astype(int)
+        #print(rho.shape[-1], rho)
+        #no_qubits = np.log2(rho.shape[-1]).astype(int)
+        no_qubits = int((rho.shape[-1]))
         rho, measurement = rho.to(device), measurement.to(device)
         basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
         snapshot_batch = []
@@ -67,7 +68,7 @@ def train_measurement_predictor(
         # iterate over batch (to be paralelized!)
         for rho_k in rho:
             rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*no_qubits)
-            print(rho_k)
+            #print(rho_k)
 
             snapshot_batch.append(model.take_snapshot(rho_k, basis_comp_vector))
         initial_snapshot_with_basis = (torch.Tensor(snapshot_batch).to(device), basis_comp_vector.expand(rho.shape[0], -1, -1))
@@ -75,19 +76,19 @@ def train_measurement_predictor(
         predicted_rhos, predicted_bases = model(initial_snapshot_with_basis, rho)
         loss = torch.zeros(1).to(device)
         for i in range(len(predicted_rhos)):
-            print(rho.shape, predicted_rhos[i].shape)
-            print(f"Tensor to check: {predicted_rhos[i]}")
+            #print(rho.shape, predicted_rhos[i].shape)
+            #print(f"Tensor to check: {predicted_rhos[i]}")
             psi_in = torch.complex(rho[0][0], rho[0][1]).view(*[2]*no_qubits) #because its a vector
-            rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,False)) #torch tensordot
+            rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #torch tensordot changed 2nd True
             rho0 = rho0.reshape(int(pow(2, no_qubits)),int(pow(2, no_qubits)))
             rho0_real = rho0.real
             rho0_imag = rho0.imag
 
             stacked_tensor = torch.stack([rho0_real, rho0_imag], dim=0)
             stacked_tensor = stacked_tensor.unsqueeze(0)  # Add an extra dimension at the beginning
-            print(f"Orginal tensor: {stacked_tensor}")
-            
-            loss += criterion(predicted_rhos[i], stacked_tensor)
+            #print(f"Orginal tensor: {stacked_tensor}")
+            #print(f"Predicted tensor: {predicted_rhos[i]}")
+            loss += criterion(predicted_rhos[i].requires_grad_(True), stacked_tensor.requires_grad_(True))
         # enforce to select only selected Pauli as basis: ???
         # if bases_loss_fn is not None:
         #     bases_loss = bases_loss_fn(predicted_bases)
@@ -140,7 +141,8 @@ def test_measurement_predictor(
     metrics = {name: {f'reconstruction {i}': 0 for i in range(num_returned_reconstructions)} for name in criterions.keys()}
     with torch.no_grad():
         for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
-            no_qubits = np.log2(rho.shape[-1]).astype(int)
+            #no_qubits = np.log2(rho.shape[-1]).astype(int)
+            no_qubits = int(rho.shape[-1])
             rho, measurement = rho.to(device), measurement.to(device)
             basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
             # iterate over batch (to be paralelized!)
@@ -153,7 +155,7 @@ def test_measurement_predictor(
             for name, criterion in criterions.items():
                 for i in range(len(predicted_rhos)):
                     psi_in = torch.complex(rho[0][0], rho[0][1]).view(*[2]*no_qubits) #because its a vector
-                    rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,False)) #torch tensordot
+                    rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #torch tensordot
                     rho0 = rho0.reshape(int(pow(2, no_qubits)),int(pow(2, no_qubits)))
                     rho0_real = rho0.real
                     rho0_imag = rho0.imag

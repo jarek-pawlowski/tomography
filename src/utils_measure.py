@@ -95,7 +95,9 @@ class States:
 class Basis:
     def __init__(self, basis):
         self.basis = basis
-            
+        
+    def __str__(self):
+        return '\n'.join(str(matrix) for matrix in self.basis)
             
 states = States(Kwiat_Pauli_Basis=False)
 
@@ -111,6 +113,10 @@ Pauli_c = Basis([tensordot(states.Db, states.Db, conj_tr=(False,True)),
                  tensordot(states.V, states.V, conj_tr=(False,True))])
 
 Kwiat_projectors = Basis([states.H, states.V, states.D, states.R])
+
+#print each object in Pauli as a matrix: 
+#print(Pauli)
+#print(Pauli_c)
 
 
 class Measurement:
