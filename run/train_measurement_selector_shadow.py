@@ -17,7 +17,7 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
 def main():
     # load data
     num_qubits = 2
-    batch_size = 1
+    batch_size = 2
     train_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states/', return_density_matrix=True)
     test_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states/', return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -26,7 +26,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # create model
-    model_name = 'full_lstm_basis_selector_v3_Pauli_basis_loss_heisenberg'
+    model_name = 'full_lstm_shadow_mse_loss_heisenberg_2_qubits_50_shadow_epoch_2000'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -44,7 +44,7 @@ def main():
         'basis_reconstruction': basis_reconstruction,
         'layers': 6,
         'hidden_size': 128,
-        'max_num_snapshots': 1000,
+        'max_num_snapshots': 50,
         'device': device
     }
     model = LSTMMeasurementSelector(**model_params)
@@ -52,8 +52,8 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 1
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    num_epochs = 2000
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
     criterion = nn.MSELoss()
     criterions = {
         'test_loss': criterion

@@ -99,18 +99,27 @@ class LSTMMeasurementSelector(nn.Module):
             #check if it is going to work better with sqrt
             measurement_basis_probability = torch.sqrt(measurement_basis_probability) #output of LSTM is power of 2 so normalise! 
 
-            
-            #random selection of basis matrices where a_i = 1 and respective ones are 0
-            measurement_basis_probability_not_random = torch.zeros_like(measurement_basis_probability)
-            
+            '''
+            #random selection of basis matrices where a_i = 1 and respective ones are 0]
+            #1 0 0 , 0 1 0, 0 0 1 working, now probabilties 1/2 1/2 0 in random permutation
+            measurement_basis_probability_not_random = torch.zeros_like(measurement_basis_probability, requires_grad=True).clone()
+        
             for i in range(measurement_basis_probability_not_random.shape[0]):
                 for j in range(measurement_basis_probability_not_random.shape[1]):
                     random_index = torch.randperm(measurement_basis_probability_not_random.shape[2])[0]
                     measurement_basis_probability_not_random[i][j][random_index] = 1
                     
+                    # Generate a permutation of the indices
+                    #indices = torch.randperm(measurement_basis_probability_not_random.shape[2])
+                    
+                    # Select the first two indices and assign them a value of 0.5
+                    #measurement_basis_probability_not_random[i][j][indices[0]] = 0.5
+                    #measurement_basis_probability_not_random[i][j][indices[1]] = 0.5
+                    
             measurement_basis_probability = measurement_basis_probability_not_random
-            #print(measurement_basis_probability_not_random)
-            
+            measurement_basis_probability = torch.sqrt(measurement_basis_probability)
+            '''
+            #print(measurement_basis_probability)
             
             # now make measurements
             snapshot_batch = []
@@ -154,8 +163,8 @@ class LSTMMeasurementSelector(nn.Module):
         # split each rho into real and imag parts:
         rho_reconstructed = torch.stack([rho_reconstructed.real, rho_reconstructed.imag], dim=1)
         # we return only the final reconstruction -- to be considered later
-        print(f" rho : {tensordot(rho[0][0], rho[0][0],indices=0, conj_tr=(True,True)).reshape(4,4)}")
-        print(f" rho reconstructed : {rho_reconstructed[0][0]}")
+        #print(f" rho : {tensordot(rho[0][0], rho[0][0],indices=0, conj_tr=(True,True)).reshape(4,4)}")
+        #print(f" rho reconstructed : {rho_reconstructed[0][0]}")
         
         return [rho_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
 

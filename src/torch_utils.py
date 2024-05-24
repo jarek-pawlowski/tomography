@@ -73,22 +73,26 @@ def train_measurement_predictor(
             snapshot_batch.append(model.take_snapshot(rho_k, basis_comp_vector))
         initial_snapshot_with_basis = (torch.Tensor(snapshot_batch).to(device), basis_comp_vector.expand(rho.shape[0], -1, -1))
         optimizer.zero_grad()
-        predicted_rhos, predicted_bases = model(initial_snapshot_with_basis, rho)
+        predicted_rhos, predicted_bases = model(initial_snapshot_with_basis, rho) #here model runs
         loss = torch.zeros(1).to(device)
-        for i in range(len(predicted_rhos)):
+        
+        for pred, gt in zip(predicted_rhos, rho): #loss over all predicted rhos gt is loaded from dataset
             #print(rho.shape, predicted_rhos[i].shape)
             #print(f"Tensor to check: {predicted_rhos[i]}")
-            psi_in = torch.complex(rho[0][0], rho[0][1]).view(*[2]*no_qubits) #because its a vector
-            rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #torch tensordot changed 2nd True
-            rho0 = rho0.reshape(int(pow(2, no_qubits)),int(pow(2, no_qubits)))
+            psi_gt = torch.complex(gt[0], gt[1]).view(*[2]*no_qubits).reshape(int(pow(2, no_qubits)))
+            
+            rho0  = tensordot(psi_gt, psi_gt, indices=0, conj_tr=(False,True)) #density matrix torch tensordot changed 2nd True
+            #rho0 = rho0_bez.reshape(int(pow(2, no_qubits)),int(pow(2, no_qubits)))
             rho0_real = rho0.real
             rho0_imag = rho0.imag
-
             stacked_tensor = torch.stack([rho0_real, rho0_imag], dim=0)
+            
             stacked_tensor = stacked_tensor.unsqueeze(0)  # Add an extra dimension at the beginning
+            
             #print(f"Orginal tensor: {stacked_tensor}")
-            #print(f"Predicted tensor: {predicted_rhos[i]}")
-            loss += criterion(predicted_rhos[i].requires_grad_(True), stacked_tensor.requires_grad_(True))
+            #print(f"Predicted tensor: {pred}")
+            
+            loss += criterion(pred, stacked_tensor)
         # enforce to select only selected Pauli as basis: ???
         # if bases_loss_fn is not None:
         #     bases_loss = bases_loss_fn(predicted_bases)
@@ -153,22 +157,22 @@ def test_measurement_predictor(
             initial_snapshot_with_basis = (torch.Tensor(snapshot_batch).to(device), basis_comp_vector.expand(rho.shape[0], -1, -1))
             predicted_rhos, _ = model(initial_snapshot_with_basis, rho)        
             for name, criterion in criterions.items():
-                for i in range(len(predicted_rhos)):
-                    psi_in = torch.complex(rho[0][0], rho[0][1]).view(*[2]*no_qubits) #because its a vector
-                    rho0 = tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #torch tensordot
-                    rho0 = rho0.reshape(int(pow(2, no_qubits)),int(pow(2, no_qubits)))
+                for i, (pred, gt) in enumerate(zip(predicted_rhos, rho)): #loss over all predicted rhos gt is loaded from dataset
+                    psi_gt = torch.complex(gt[0], gt[1]).view(*[2]*no_qubits).reshape(int(pow(2, no_qubits)))
+                    rho0  = tensordot(psi_gt, psi_gt, indices=0, conj_tr=(False,True)) #density matrix torch tensordot changed 2nd True
                     rho0_real = rho0.real
                     rho0_imag = rho0.imag
-
                     stacked_tensor = torch.stack([rho0_real, rho0_imag], dim=0)
+                    
                     stacked_tensor = stacked_tensor.unsqueeze(0)  # Add an extra dimension at the beginning
-                    #print(f"Orginal tensor: {stacked_tensor}")
-                    metrics[name][f'reconstruction {i}'] += criterion(predicted_rhos[i], stacked_tensor).item()
+
+                    metrics[name][f'reconstruction {i}'] += criterion(pred, stacked_tensor).item()
     for name in metrics.keys():
         for i in range(num_returned_reconstructions):
             metrics[name][f'reconstruction {i}'] /= len(test_loader)
             print(f'{name} - reconstruction {i}: {metrics[name][f"reconstruction {i}"]:.4f}')
     return metrics
+
 
 
 def test_varying_input(
