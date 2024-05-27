@@ -57,8 +57,8 @@ class LSTMMeasurementSelector(nn.Module):
             
             norm_psi = 1/torch.sqrt((2*a_vector_norm*(a3+a_vector_norm)))
     
-            psi_plus = norm_psi * torch.tensor([a3 + a_vector_norm, a1 + 1j * a2], dtype=torch.complex64)
-            psi_minus = norm_psi * torch.tensor([1j*a2 - a1, a3 + a_vector_norm], dtype=torch.complex64)
+            psi_plus = norm_psi * torch.tensor([a3 + a_vector_norm, a1 + 1j * a2], dtype=torch.complex64).to(self.device)
+            psi_minus = norm_psi * torch.tensor([1j*a2 - a1, a3 + a_vector_norm], dtype=torch.complex64).to(self.device)
             
             #print(f"this is norm: {a_vector_norm}")
             #print(f"psi plus {psi_plus}")
