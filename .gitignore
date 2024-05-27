@@ -9,4 +9,5 @@ __pycache__
 *.ipynb
 /small_data
 /training_states
+/datasets
 .DS_Store

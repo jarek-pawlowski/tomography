@@ -322,8 +322,8 @@ print("Start the diagonalization")
 basis_H, basis_H_s_z, spins = H.calculate_basis()
 
 #J a random number form 0.01 to 1.0 
-#J = 1.0
-J = np.random.uniform(-1.0, 1.0)
+J = 1.0
+#J = np.random.uniform(-1.0, 1.0)
 print(f"J equals = {J}")
 H.create_Hamiltonian(J, adjMatrix)
 
@@ -360,4 +360,6 @@ print(tensor)
 loaded_tensor = np.load(f'./training_states/train/{size_of_the_chain}_tensor_state_{j}.npy')
 print(loaded_tensor)
 print(loaded_tensor.dtype)
+
+
 
