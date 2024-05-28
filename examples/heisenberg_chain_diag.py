@@ -306,7 +306,7 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
         
-size_of_the_chain = 2
+size_of_the_chain = 6
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
 adjMatrix[-1][0] = 0
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])
@@ -328,22 +328,29 @@ print(f"J equals = {J}")
 H.create_Hamiltonian(J, adjMatrix)
 
 energies, vectors = H.eig_diagonalize_Heisenberg()
-
+print(energies)
 #find a ground state and save its coresponding eigenvector as a tensor
 #ground_state_index = np.argmin(energies)
 #ground_state_energy = energies[ground_state_index]
-#ground_state_vector = vectors[:, ground_state_index]
+#ground_state_vector = vectors[:, ground_state_index#]
+
+#choose ten eigenvalues with the lowest energy and their corresponding eigenvectors
+energies = energies[:10]
+vectors = vectors[:,:10]
+print(energies)
 
 #tensor = ground_state_vector.reshape(tuple(2 for _ in range(size_of_the_chain)))
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
 #np.save(filename, tensor)
 
-with open (f'./training_states/dictionary.txt', 'w') as file:
+folder_name = f'./training_states_{size_of_the_chain}'
+
+with open (f'{folder_name}/dictionary.txt', 'w') as file:
     
     for j in range(len(energies)):
         
-        print(f"Eigenvectors for this spin: {vectors[:,j]}")
-        print(f"This is energy {energies[j]}")   
+        #print(f"Eigenvectors for this spin: {vectors[:,j]}")
+        #print(f"This is energy {energies[j]}")   
                 
         # Reshape the vector into a 2x2 tensor
         tensor = vectors[:,j].reshape(tuple(2 for _ in range(size_of_the_chain)))
@@ -351,7 +358,7 @@ with open (f'./training_states/dictionary.txt', 'w') as file:
         # density_matrix = utils.tensordot(vectors[:,j], vectors[:,j], indices=0, conj_tr=(True,True))
         
         # Now, save this tensor to a .npy file
-        filename = f'./training_states/train/{size_of_the_chain}_tensor_state_{j}.npy'
+        filename = f'./{folder_name}/train/{size_of_the_chain}_tensor_state_{j}.npy'
         file.write(f"{J} {energies[j]}\n")
         np.save(filename, tensor)
 
