@@ -306,7 +306,7 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
         
-size_of_the_chain = 6
+size_of_the_chain = 16
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
 adjMatrix[-1][0] = 0
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])
@@ -328,7 +328,7 @@ print(f"J equals = {J}")
 H.create_Hamiltonian(J, adjMatrix)
 
 energies, vectors = H.eig_diagonalize_Heisenberg()
-print(energies)
+#print(energies)
 #find a ground state and save its coresponding eigenvector as a tensor
 #ground_state_index = np.argmin(energies)
 #ground_state_energy = energies[ground_state_index]
@@ -337,7 +337,7 @@ print(energies)
 #choose ten eigenvalues with the lowest energy and their corresponding eigenvectors
 energies = energies[:10]
 vectors = vectors[:,:10]
-print(energies)
+#print(energies)
 
 #tensor = ground_state_vector.reshape(tuple(2 for _ in range(size_of_the_chain)))
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
@@ -362,11 +362,11 @@ with open (f'{folder_name}/dictionary.txt', 'w') as file:
         file.write(f"{J} {energies[j]}\n")
         np.save(filename, tensor)
 
-print(tensor)
+#print(tensor)
 # To verify, let's load the file and print the tensor
-loaded_tensor = np.load(f'./training_states/train/{size_of_the_chain}_tensor_state_{j}.npy')
-print(loaded_tensor)
-print(loaded_tensor.dtype)
+#loaded_tensor = np.load(f'./training_states/train/{size_of_the_chain}_tensor_state_{j}.npy')
+#print(loaded_tensor)
+#print(loaded_tensor.dtype)
 
 
 

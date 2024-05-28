@@ -8,6 +8,12 @@ __pycache__
 *.joblib
 *.ipynb
 /small_data
-/training_states
+/training_states_2
+/training_states_4
+/training_states_6
+/training_states_8
+/training_states_10
+/training_states_14
+/training_states_16
 /datasets
 .DS_Store

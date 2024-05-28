@@ -67,6 +67,7 @@ def train_measurement_predictor(
         # make initial measurements
         # iterate over batch (to be paralelized!)
         for rho_k in rho:
+            #breakpoint()
             rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*no_qubits)
             #print(rho_k)
 
