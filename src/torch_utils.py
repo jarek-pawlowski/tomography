@@ -48,9 +48,10 @@ def train_measurement_predictor(
     train_loader: DataLoader, 
     optimizer: Optimizer, 
     epoch: int, 
+    no_qubits: int,
     log_interval: int = 100, 
     criterion: t.Callable = nn.MSELoss(),
-    bases_loss_fn: t.Optional[t.Callable] = None
+    bases_loss_fn: t.Optional[t.Callable] = None,
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
@@ -60,7 +61,7 @@ def train_measurement_predictor(
     for batch_idx, (rho, measurement, _) in pbar:
         #print(rho.shape[-1], rho)
         #no_qubits = np.log2(rho.shape[-1]).astype(int)
-        no_qubits = int((rho.shape[-1]))
+        #no_qubits = int((rho.shape[-1]))
         rho, measurement = rho.to(device), measurement.to(device)
         basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
         snapshot_batch = []
@@ -136,6 +137,7 @@ def test_measurement_predictor(
     model: nn.Module,
     device: torch.device,
     test_loader: DataLoader,
+    no_qubits: int,
     criterions: t.Dict[str, t.Callable],
     num_returned_reconstructions: int = 1,
 ) -> t.Dict[str, t.List[float]]:
@@ -147,7 +149,7 @@ def test_measurement_predictor(
     with torch.no_grad():
         for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
             #no_qubits = np.log2(rho.shape[-1]).astype(int)
-            no_qubits = int(rho.shape[-1])
+            #no_qubits = int(rho.shape[-1])
             rho, measurement = rho.to(device), measurement.to(device)
             basis_comp_vector = torch.Tensor([[1,0,0]]*no_qubits).to(device)
             # iterate over batch (to be paralelized!)

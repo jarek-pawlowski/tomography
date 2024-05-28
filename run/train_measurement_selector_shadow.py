@@ -18,8 +18,9 @@ def main():
     # load data
     num_qubits = 4
     batch_size = 10
-    train_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states_4/', return_density_matrix=True)
-    test_dataset = MeasurementVectorDataset(num_qubits, root_path='./training_states_4/', return_density_matrix=True)
+    root_path = './training_states_4/'
+    train_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
+    test_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
@@ -61,8 +62,8 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, bases_loss_fn=basis_loss_fn)
-        test_metrics = test_measurement_predictor(model, device, test_loader, criterions, 1)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, num_qubits, criterion=criterion, log_interval=10, bases_loss_fn=basis_loss_fn)
+        test_metrics = test_measurement_predictor(model, device, test_loader, num_qubits, criterions, 1)
         # if test_metrics['test_loss']['measurement 15'] < best_test_loss:
         #     best_test_loss = test_metrics['test_loss']['measurement 15']
         #     model.save(model_save_path)

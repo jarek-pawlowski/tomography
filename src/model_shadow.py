@@ -139,7 +139,7 @@ class LSTMMeasurementSelector(nn.Module):
         #print(basis_vectors)
         rho_reconstructed = []
         for snapshot_with_basis in snapshots_with_basis_vector:
-            rho_reconstructed_s = torch.zeros(rho.shape[0], 2*rho.shape[-1], 2*rho.shape[-2]).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
+            rho_reconstructed_s = torch.zeros(rho.shape[0], rho.shape[-1]**self.num_qubits, rho.shape[-2]**self.num_qubits).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
             #print(rho_reconstructed_s)
             measurement_shadow = snapshot_with_basis[:,:self.num_qubits]
             basis_vectors = snapshot_with_basis[:,self.num_qubits:].view(-1, self.num_qubits, self.basis_size)
