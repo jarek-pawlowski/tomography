@@ -306,7 +306,7 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
         
-size_of_the_chain = 6
+size_of_the_chain = 12
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
 adjMatrix[-1][0] = 0
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])

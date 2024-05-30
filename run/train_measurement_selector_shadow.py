@@ -16,18 +16,19 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
     
 def main():
     # load data
-    num_qubits = 4
-    batch_size = 10
-    root_path = './training_states_4/'
+    num_qubits = 14
+    batch_size = 1
+    root_path = f'./training_states_{num_qubits}/'
     train_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     test_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
 
     # create model
-    model_name = 'full_lstm_shadow_mse_loss_heisenberg_4_qubits_50_shadow_epoch_1000'
+    model_name = f'30_MAY_full_lstm_shadow_mse_loss_heisenberg_{num_qubits}_qubits_50_shadow_epoch_100'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -53,7 +54,7 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 1000
+    num_epochs = 100
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     criterion = nn.MSELoss()
     criterions = {
