@@ -60,9 +60,9 @@ print("\n")
 print(np.around(rho1, 3))
 '''
 #number_qubits = [2, 3]
-number_qubits = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+number_qubits = [2, 4, 6, 8, 10, 12]
 #set_of_T = [10, 100, 1000, 10000, 100000]
-set_of_T = [10, 100, 1000, 10000]
+set_of_T = [10, 100, 1000, 10000, 100000]
 
 all_data = []
 for qubit in number_qubits:
@@ -80,25 +80,26 @@ for qubit in number_qubits:
     #psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
     
     #loaded states by user:
-    psi_in = np.load(f'./training_states/train/{qubit}_tensor_state_1.npy')
+    psi_in = np.load(f'./training_states/training_states_{qubit}/{qubit}_tensor_state_1.npy')
     psi_in = psi_in.astype(np.complex128)
 
     rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #changed first to TRUE
     print(f"rho0 shape: {rho0.shape}")
-    print(f"rho0: {rho0}")
+    #print(f"rho0: {rho0}")
     norms = []
     for t in set_of_T: 
         print(f"Start {t}")
         snapshots = measure_shadow(t, qubit)
         rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size, qubit)
         norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
-        
-    np.set_printoptions(linewidth=200)
-    print("rho initial: ")
-    print(np.around(rho0.reshape(space_size,space_size), 3))
-    print("\n")
-    print("rho reconstructed: ")
-    print(np.around(rho1, 3))
+    
+    
+    #np.set_printoptions(linewidth=200)
+    #print("rho initial: ")
+    #print(np.around(rho0.reshape(space_size,space_size), 3))
+    #print("\n")
+    #print("rho reconstructed: ")
+    #print(np.around(rho1, 3))
         
 
     fig, ax = plt.subplots()
@@ -113,6 +114,15 @@ for qubit in number_qubits:
     # Accumulate data for final plot
     all_data.append((set_of_T, norms, f"{qubit} qubits"))
     
+    # Create additional plot to show all lines together
+    fig, ax = plt.subplots()
+    
+    # Save x, y data to file
+    data = np.array([set_of_T, norms]).T
+    np.savetxt(f'{qubit}_data.txt', data, delimiter=',', header='x, y', fmt='%.2f')
+   
+  
+    '''
     # Create additional plot to show all lines together
     fig, ax = plt.subplots()
     
@@ -135,4 +145,5 @@ for qubit in number_qubits:
     ax.set_title("All qubits together Real chain log log")
     ax.legend()  # Display a legend to identify each line
     #fig.savefig('./plots/all_qubits_together_Real_chain_slope.png')
-    fig.savefig('./plots/test.png')
+    fig.savefig('./plots/test.png') 
+    '''
