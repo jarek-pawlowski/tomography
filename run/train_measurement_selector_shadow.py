@@ -16,8 +16,10 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
     
 def main():
     # load data
-    num_qubits = 14
+    num_qubits = 12
     batch_size = 1
+    numer_of_snapshots = 200
+    epochs = 50
     root_path = f'./training_states_{num_qubits}/'
     train_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     test_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
@@ -28,7 +30,7 @@ def main():
     device = torch.device('cpu')
 
     # create model
-    model_name = f'30_MAY_full_lstm_shadow_mse_loss_heisenberg_{num_qubits}_qubits_50_shadow_epoch_100'
+    model_name = f'12_JUN_full_lstm_shadow_mse_loss_heisenberg_{num_qubits}_qubits_{numer_of_snapshots}_shadow_epoch_{epochs}'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -46,7 +48,7 @@ def main():
         'basis_reconstruction': basis_reconstruction,
         'layers': 6,
         'hidden_size': 128,
-        'max_num_snapshots': 50,
+        'max_num_snapshots': numer_of_snapshots,
         'device': device
     }
     model = LSTMMeasurementSelector(**model_params)
@@ -54,7 +56,7 @@ def main():
     # train & test model
     log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 100
+    num_epochs = epochs
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     criterion = nn.MSELoss()
     criterions = {

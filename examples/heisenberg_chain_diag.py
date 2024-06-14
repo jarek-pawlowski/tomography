@@ -31,7 +31,7 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
         
-size_of_the_chain = 12
+size_of_the_chain = 10
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
 adjMatrix[-1][0] = 0
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])
@@ -68,9 +68,9 @@ vectors = vectors[:,:10]
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
 #np.save(filename, tensor)
 
-folder_name = f'training_states/training_states_{size_of_the_chain}'
+folder_name = f'training_states_different_J/training_states_{size_of_the_chain}'
 
-with open (f'{folder_name}/dictionary.txt', 'w') as file:
+with open (f'{folder_name}/dictionary.txt', 'a') as file:
     
     for j in range(len(energies)):
         
