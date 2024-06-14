@@ -18,9 +18,4 @@ __pycache__
 /training_states_16
 /datasets
 .DS_Store
-/2_data.txt
-/4_data.txt
-/6_data.txt
-/8_data.txt
-/10_data.txt
-/12_data.txt
+/data_entropy

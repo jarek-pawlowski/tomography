@@ -136,10 +136,10 @@ class Heisenberg(object):
         #subsystem_A_beta = list(map(lambda x: x[:int(len(x)/size_of_sub_A)], spin_basis))
         #subsystem_B_beta = list(map(lambda x: x[int(len(x)/size_of_sub_B):], spin_basis))
         
-        print(subsystem_A_beta)
-        print(subsystem_B_beta)
-        print(f"Basis for subsystem A: {subsystem_A}")
-        print(f"Basis for subsystem B: {subsystem_B}")
+        #print(subsystem_A_beta)
+        #print(subsystem_B_beta)
+        #print(f"Basis for subsystem A: {subsystem_A}")
+        #print(f"Basis for subsystem B: {subsystem_B}")
     
         new_basis = []
         
@@ -160,7 +160,7 @@ class Heisenberg(object):
             if (i,j) not in new_basis:
              new_basis.append((i,j))
     
-        print("This is new basis: ", new_basis)
+        #print("This is new basis: ", new_basis)
 
         return subsystem_A, subsystem_B, new_basis
     
