@@ -19,3 +19,4 @@ __pycache__
 /datasets
 .DS_Store
 /data_entropy
+/training_states_different_J

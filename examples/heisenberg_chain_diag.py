@@ -68,7 +68,7 @@ vectors = vectors[:,:10]
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
 #np.save(filename, tensor)
 
-folder_name = f'training_states_different_J/training_states_{size_of_the_chain}'
+folder_name = f'training_states/training_states_{size_of_the_chain}'
 
 with open (f'{folder_name}/dictionary.txt', 'a') as file:
     
@@ -94,5 +94,54 @@ with open (f'{folder_name}/dictionary.txt', 'a') as file:
 #print(loaded_tensor)
 #print(loaded_tensor.dtype)
 
+##################################### LOOP FOR DIFFERNET J VALUES #####################################
+# List of J values
+J_values = np.arange(-1.5, 1.6, 0.1) #last one is 1.5
 
+#J_values = [-1, 1]
+
+folder_name = f'training_states_different_J/training_states_{size_of_the_chain}'
+folder_name_energies = f'training_states_different_J/energies_states_{size_of_the_chain}'
+# Check if the folder exists and create it if it doesn't
+if not os.path.exists(folder_name):
+    os.makedirs(folder_name)
+    os.makedirs(folder_name_energies)
+    
+# Clear the contents of dictionary.txt
+with open(f'{folder_name}/dictionary.txt', 'w') as file:
+    pass
+    
+file_counter = 0
+
+for index, J in enumerate(J_values):
+    S = 1/2 #spin number 
+    N = len(adjMatrix) #size of the system
+    print("Calculating N = " + str(N)  + " system for S = " + str(S))
+
+    H = entropy_calc.Heisenberg(N, S)
+    print("Start the diagonalization")
+
+    basis_H, basis_H_s_z, spins = H.calculate_basis()
+
+    print(f"J equals = {J}")
+    H.create_Hamiltonian(J, adjMatrix)
+
+    energies, vectors = H.eig_diagonalize_Heisenberg()
+
+    # choose ten eigenvalues with the lowest energy and their corresponding eigenvectors
+    energies = energies[:10].real
+    vectors = vectors[:,:10]
+    
+    np.savetxt(f'{folder_name_energies}/energies_{index}.txt', energies)
+
+    with open (f'{folder_name}/dictionary.txt', 'a') as file:
+        for j in range(len(energies)):
+            # Reshape the vector into a 2x2 tensor
+            tensor = vectors[:,j].reshape(tuple(2 for _ in range(size_of_the_chain)))
+            
+            # Now, save this tensor to a .npy file
+            filename = f'./{folder_name}/{size_of_the_chain}_tensor_state_{file_counter}.npy'
+            file.write(f"{J} {energies[j]}\n")
+            np.save(filename, tensor)
+            file_counter += 1
 
