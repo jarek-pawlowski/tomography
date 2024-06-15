@@ -172,15 +172,55 @@ class Heisenberg(object):
         for i in range(len(adjMatrix)):
             for j in range(len(adjMatrix)):
                 if adjMatrix[j][i] == 1:
-                    self.H += 1/2 * J * (np.dot(self.S_site(j, self.S_plus),self.S_site(i, self.S_minus)) \
+                    self.H +=  J * (1/2 * (np.dot(self.S_site(j, self.S_plus),self.S_site(i, self.S_minus)) \
                     + np.dot(self.S_site(j, self.S_minus),self.S_site(i, self.S_plus))) \
-                    + np.dot(self.S_site(j, self.S_z), self.S_site(i, self.S_z))
+                    + np.dot(self.S_site(j, self.S_z), self.S_site(i, self.S_z)))
         
         #for i in range(len(self.H)):
                 #self.H[i][i] += np.random.random()*10e-8
         #print(self.H)
         print("Len of Hamiltonian: ", len(self.H))
         
+    def create_Hamiltonian_zeeman_B(self, J , adjMatrix):
+        #definition of S matrices and diagonalization
+        
+        g = 2.0  # g-factor (dimensionless)
+        mu_B = 1e-5  # Bohr magneton in simplified units
+        B = 1.0   # Magnetic field in Tesla
+
+        #using adjacency matrix to define neighbouring sites
+        for i in range(len(adjMatrix)):
+            for j in range(len(adjMatrix)):
+                if adjMatrix[j][i] == 1:
+                    #THERE IS -J IN THE HAMILTONIAN
+                    self.H +=  (-J) * (1/2 * (np.dot(self.S_site(j, self.S_plus),self.S_site(i, self.S_minus)) \
+                    + np.dot(self.S_site(j, self.S_minus),self.S_site(i, self.S_plus)))\
+                    + np.dot(self.S_site(j, self.S_z), self.S_site(i, self.S_z)))
+        
+        mid_index = len(self.H) // 2
+
+        for i in range(len(self.H)):
+            if i < mid_index:
+                self.H[i][i] -= g*mu_B*B
+            else:
+                self.H[i][i] += g*mu_B*B
+        #print(self.H)
+        print("Len of Hamiltonian: ", len(self.H))
+        
+    def calculate_polarisation_sz(self, eigenvectors, adjMatrix):
+         #using adjacency matrix to define neighbouring sites
+        for i in range(len(adjMatrix)):
+            for j in range(len(adjMatrix)):
+                if adjMatrix[j][i] == 1:
+                    sz_operator = np.dot(self.S_site(j, self.S_z), self.S_site(i, self.I))
+        
+        spin_polarization = []
+        for k in range(eigenvectors.shape[1]):
+            psi = eigenvectors[:, k]
+            polarization = np.dot(psi.conj().T, np.dot(sz_operator,psi))
+            spin_polarization.append(polarization)
+        
+        return spin_polarization
         
     def eig_diagonalize(self,A):
         #fucntion for diagonalization with sorting eigenvalues and rewriting eigenvectors as a list
