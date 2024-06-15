@@ -68,7 +68,7 @@ vectors = vectors[:,:10]
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
 #np.save(filename, tensor)
 
-folder_name = f'training_states/training_states_{size_of_the_chain}'
+folder_name = f'training_states_{size_of_the_chain}'
 
 with open (f'{folder_name}/dictionary.txt', 'a') as file:
     
