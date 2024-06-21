@@ -16,21 +16,21 @@ from src.utils_measure import Pauli, Pauli_c, Pauli_vector
     
 def main():
     # load data
-    num_qubits = 12
-    batch_size = 1
-    numer_of_snapshots = 200
-    epochs = 50
-    root_path = f'./training_states_{num_qubits}/'
+    num_qubits = 10
+    batch_size = 10
+    numer_of_snapshots = 50
+    epochs = 500
+    root_path = f'./training_states_different_J/training_states_{num_qubits}/'
     train_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     test_dataset = MeasurementVectorDataset(num_qubits, root_path=root_path, return_density_matrix=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    #device = torch.device('cpu')
 
     # create model
-    model_name = f'12_JUN_full_lstm_shadow_mse_loss_heisenberg_{num_qubits}_qubits_{numer_of_snapshots}_shadow_epoch_{epochs}'
+    model_name = f'14_JUN_J_spectrum_full_lstm_shadow_mse_loss_heisenberg_{num_qubits}_qubits_{numer_of_snapshots}_shadow_epoch_{epochs}'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
