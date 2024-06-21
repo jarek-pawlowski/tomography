@@ -4,8 +4,12 @@ import functools as ft
 import torch
 import torch.nn as nn
 
+import numpy as np
+
 from src.torch_measure import Measurement
 from src.torch_utils import tensordot
+
+from src.utils_entropy import Heisenberg
 
 
 class LSTMMeasurementSelector(nn.Module):
@@ -35,7 +39,17 @@ class LSTMMeasurementSelector(nn.Module):
         ) for _ in range(num_qubits)])
         self.measurement = Measurement(self.num_qubits)
         #self.matrix_reconstructor = LSTMDensityMatrixReconstructor(self.num_qubits + self.basis_dim, num_qubits, layers, hidden_size)  # <- here
-
+        #constructor for entropy class
+        self.entropy = Heisenberg(self.num_qubits, 1/2)
+        self.basis_H, self.basis_H_s_z, self.spins = self.entropy.calculate_basis()
+        self.size_of_sub_A = int(self.num_qubits/2)
+        self.size_of_sub_B = int(self.num_qubits - self.size_of_sub_A)
+        self.s_z_0_index = int(self.num_qubits/2)
+        #only for S_z = 0
+        self.spin_basis = self.entropy.sz_subspace(self.s_z_0_index)
+        self.subsystem_A, self.subsystem_B, self.new_basis = self.entropy.subsystems_fixed_s_z(self.spin_basis,self.size_of_sub_A,self.size_of_sub_B)
+        
+        
     def take_snapshot(self, rho_k, measurement_basis_probability_k):
         # basis matrices now are not RANDOM !!! Now LSTM chooses 
         
@@ -166,7 +180,31 @@ class LSTMMeasurementSelector(nn.Module):
         #print(f" rho : {tensordot(rho[0][0], rho[0][0],indices=0, conj_tr=(True,True)).reshape(4,4)}")
         #print(f" rho reconstructed : {rho_reconstructed[0][0]}")
         
-        return [rho_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
+        #entropy calculation part 
+        rho_reconstructed_np = rho_reconstructed[0][0].detach().cpu().numpy()
+        print(f"This is rho reconstructed: {rho_reconstructed_np}")
+        bipartite_system = np.zeros(shape=(len(self.subsystem_A),len(self.subsystem_B)), dtype = float)
+
+        for i in range(len(bipartite_system)):
+            for j in range(len(bipartite_system[i])):
+                print(self.new_basis[i][0])
+                print(self.new_basis[j][1])
+                print(rho_reconstructed_np[i][j])
+                bipartite_system[self.new_basis[i][0]][self.new_basis[j][1]] = rho_reconstructed_np[i][j]
+
+        #trace calculation
+        if not .9999999999999 <= np.trace(bipartite_system) <= 1.000000000001:
+                print("Trace of the system: ", np.trace(bipartite_system))
+        
+        #entropy
+        entropy_reconstructed, eigen_rho_reconstructed = self.entropy.calculate_entropy(bipartite_system, self.size_of_sub_A) 
+        
+        print(f"This is entropy : {entropy_reconstructed}")
+        [print(" lambdas: ", eigen_rho_reconstructed[i]) for i  in range(len(eigen_rho_reconstructed))]
+        [print("Complex lambdas: ", eigen_rho_reconstructed[i]) for i  in range(len(eigen_rho_reconstructed)) if eigen_rho_reconstructed[i].imag <= 10e-8]
+        
+        breakpoint()
+        return [entropy_reconstructed], basis_vectors  # we also return predicted basis vectors to further regularize them
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)

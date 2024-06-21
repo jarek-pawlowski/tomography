@@ -14,7 +14,7 @@ import pandas as pd
 #my .py files
 
 
-size_of_the_chain = 19
+size_of_the_chain = 21
 
 # Open the file and read the lines
 with open(f'datasets/Eigenvalues_results_{size_of_the_chain}_feast.dat', 'r') as f:
