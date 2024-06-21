@@ -32,9 +32,9 @@ Program for calculating and diagonalization of Heisenberg Hamiltonian for graph 
         #4 sites open
         #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,0]])
         
-size_of_the_chain = 10
+size_of_the_chain = 6
 adjMatrix = np.eye(size_of_the_chain, k=1, dtype=int)[::]
-adjMatrix[-1][0] = 0
+adjMatrix[-1][0] = 1
 #above matrix for size = 4 is : #adjMatrix = np.array([[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,0,0]])
 print("This is adjacency Matrix : \n", adjMatrix)
 
@@ -48,23 +48,19 @@ print("Start the diagonalization")
 basis_H, basis_H_s_z, spins = H.calculate_basis()
 
 #J a random number form 0.01 to 1.0 
-J = 1.0
+J = 0.0
 #J = np.random.uniform(-1.0, 1.0)
 print(f"J equals = {J}")
-H.create_Hamiltonian(J, adjMatrix)
-
+H.create_Hamiltonian_zeeman_B(J, adjMatrix)
+print("This is Hamiltonian : \n")
 energies, vectors = H.eig_diagonalize_Heisenberg()
-#print(energies)
+spin_polarisation = H.calculate_polarisation_sz(vectors, adjMatrix)
 #find a ground state and save its coresponding eigenvector as a tensor
 #ground_state_index = np.argmin(energies)
 #ground_state_energy = energies[ground_state_index]
 #ground_state_vector = vectors[:, ground_state_index#]
 
 #choose ten eigenvalues with the lowest energy and their corresponding eigenvectors
-energies = energies[:10]
-vectors = vectors[:,:10]
-#print(energies)
-
 #tensor = ground_state_vector.reshape(tuple(2 for _ in range(size_of_the_chain)))
 #filename = f'./training_states/{size_of_the_chain}_tensor_ground.npy'
 #np.save(filename, tensor)
@@ -97,12 +93,11 @@ with open (f'{folder_name}/dictionary.txt', 'a') as file:
 
 ##################################### LOOP FOR DIFFERNET J VALUES #####################################
 # List of J values
-J_values = np.arange(-1.5, 1.6, 0.1) #last one is 1.5
+J_values = np.arange(-1.0, 1.1, 0.1) #last one is 1.5
+J_values = np.round(J_values, 2)
 
-#J_values = [-1, 1]
-
-folder_name = f'training_states_different_J_zeeman/training_states_{size_of_the_chain}'
-folder_name_energies = f'training_states_different_J_zeeman/energies_states_{size_of_the_chain}'
+folder_name = f'training_states_different_J/training_states_{size_of_the_chain}'
+folder_name_energies = f'training_states_different_J/energies_states_{size_of_the_chain}'
 # Check if the folder exists and create it if it doesn't
 if not os.path.exists(folder_name):
     os.makedirs(folder_name)
@@ -125,9 +120,9 @@ for index, J in enumerate(J_values):
     basis_H, basis_H_s_z, spins = H.calculate_basis()
 
     print(f"J equals = {J}")
-    #H.create_Hamiltonian(J, adjMatrix)
+    H.create_Hamiltonian(J, adjMatrix)
     #Hamiltonian with Zeeman term
-    H.create_Hamiltonian_zeeman_B(J, adjMatrix)
+    #H.create_Hamiltonian_zeeman_B(J, adjMatrix)
     #print(H.H)
     energies, vectors = H.eig_diagonalize_Heisenberg()
 
@@ -136,7 +131,6 @@ for index, J in enumerate(J_values):
     vectors = vectors[:,:10]
 
     spin_polarisation = H.calculate_polarisation_sz(vectors, adjMatrix)
-    
     # Create a DataFrame from the energies and spin_polarisation arrays
     df = pd.DataFrame({
         'energies': energies,

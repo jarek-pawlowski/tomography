@@ -61,9 +61,9 @@ print(np.around(rho1, 3))
 '''
 #number_qubits = [2, 3]
 #number_qubits = [2, 4, 6, 8, 10, 12]
-number_qubits = [12]
+number_qubits = [2, 4, 6, 8, 10, 12]
 #set_of_T = [10, 100, 1000, 10000, 100000]
-set_of_T = [10, 100, 1000, 10000, 100000]
+set_of_T = [20, 50, 100, 150, 200]
 
 all_data = []
 for qubit in number_qubits:
@@ -81,7 +81,7 @@ for qubit in number_qubits:
     #psi_in[(1,) * (qubit)] = 1./np.sqrt(2.)
     
     #loaded states by user:
-    psi_in = np.load(f'./training_states_{qubit}/train/{qubit}_tensor_state_1.npy')
+    psi_in = np.load(f'./training_states/training_states_{qubit}/{qubit}_tensor_state_1.npy')
     psi_in = psi_in.astype(np.complex128)
 
     rho0 = utils.tensordot(psi_in, psi_in, indices=0, conj_tr=(True,True)) #changed first to TRUE
@@ -120,7 +120,7 @@ for qubit in number_qubits:
     
     # Save x, y data to file
     data = np.array([set_of_T, norms]).T
-    np.savetxt(f'{qubit}_data.txt', data, delimiter=',', header='x, y', fmt='%.2f')
+    np.savetxt(f'{qubit}_data_to_compare.txt', data, delimiter=',', header='x, y', fmt='%.2f')
    
   
     '''
