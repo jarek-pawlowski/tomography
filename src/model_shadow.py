@@ -90,53 +90,61 @@ class LSTMMeasurementSelector(nn.Module):
         # initial guesses:
         snapshots_with_basis_vector = [basis_predictor_input]
         basis_vectors = [basis_comp_vector]
-        
-        for i in range(self.max_num_snapshots - 1):  # in our case max_num_measurements = the number of snapshots
-            # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
-            h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i)) #LSTM cell to select basis
-            # projector -> simple single-layer perceptron that predicts Pauli selections from LSTM's hidden representation
-            measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
-            #check if it is going to work better with sqrt
-            measurement_basis_probability = torch.sqrt(measurement_basis_probability) #output of LSTM is power of 2 so normalise! 
-
-            '''
-            #random selection of basis matrices where a_i = 1 and respective ones are 0
-            #1 0 0 , 0 1 0, 0 0 1 working, now probabilties 1/2 1/2 0 in random permutation
-            measurement_basis_probability_not_random = torch.zeros_like(measurement_basis_probability, requires_grad=True).clone()
-        
-            for i in range(measurement_basis_probability_not_random.shape[0]):
-                for j in range(measurement_basis_probability_not_random.shape[1]):
-                    random_index = torch.randperm(measurement_basis_probability_not_random.shape[2])[0]
-                    measurement_basis_probability_not_random[i][j][random_index] = 1
-                    
-                    # Generate a permutation of the indices
-                    #indices = torch.randperm(measurement_basis_probability_not_random.shape[2])
-                    
-                    # Select the first two indices and assign them a value of 0.5
-                    #measurement_basis_probability_not_random[i][j][indices[0]] = 0.5
-                    #measurement_basis_probability_not_random[i][j][indices[1]] = 0.5
-                    
-            measurement_basis_probability = measurement_basis_probability_not_random
-            measurement_basis_probability = torch.sqrt(measurement_basis_probability)
-            '''
-            #print(measurement_basis_probability)
+        with open(f'measurement_basis_probabilities_{self.num_qubits}.txt', 'w') as file:
             
-            # now make measurements
-            snapshot_batch = []
-            # iterate over batch (to be paralelized!)
-            #print(f"this is rho {rho}")
-            for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
-                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*self.num_qubits) #2 more
-                #print(f"this is rho_k {rho_k}")
-                snapshot_batch.append(self.take_snapshot(rho_k, measurement_basis_probability_k))
-            snapshot_batch = torch.Tensor(snapshot_batch).to(snapshot.device)
-            basis_predictor_input = torch.cat((snapshot_batch, measurement_basis_probability.view(-1, self.basis_dim)), dim=-1)
-            snapshots_with_basis_vector.append(basis_predictor_input)
-            basis_vectors.append(measurement_basis_probability)
-            #sqrt on basis vectors
+            for i in range(self.max_num_snapshots - 1):  # in our case max_num_measurements = the number of snapshots
+                # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
+                h_i, c_i  = self.basis_selector(basis_predictor_input, (h_i, c_i)) #LSTM cell to select basis
+                # projector -> simple single-layer perceptron that predicts Pauli selections from LSTM's hidden representation
+                measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
+                #check if it is going to work better with sqrt
+                measurement_basis_probability = torch.sqrt(measurement_basis_probability) #output of LSTM is power of 2 so normalise! 
+
+                # Convert tensor to string representation
+                prob_str = measurement_basis_probability.cpu().numpy().tolist()
+                
+                # Write the string representation to file
+                file.write(f"{prob_str}\n")
+                
+                '''
+                #random selection of basis matrices where a_i = 1 and respective ones are 0
+                #1 0 0 , 0 1 0, 0 0 1 working, now probabilties 1/2 1/2 0 in random permutation
+                measurement_basis_probability_not_random = torch.zeros_like(measurement_basis_probability, requires_grad=True).clone()
+            
+                for i in range(measurement_basis_probability_not_random.shape[0]):
+                    for j in range(measurement_basis_probability_not_random.shape[1]):
+                        random_index = torch.randperm(measurement_basis_probability_not_random.shape[2])[0]
+                        measurement_basis_probability_not_random[i][j][random_index] = 1
+                        
+                        # Generate a permutation of the indices
+                        #indices = torch.randperm(measurement_basis_probability_not_random.shape[2])
+                        
+                        # Select the first two indices and assign them a value of 0.5
+                        #measurement_basis_probability_not_random[i][j][indices[0]] = 0.5
+                        #measurement_basis_probability_not_random[i][j][indices[1]] = 0.5
+                        
+                measurement_basis_probability = measurement_basis_probability_not_random
+                measurement_basis_probability = torch.sqrt(measurement_basis_probability)
+                '''
+                #print(measurement_basis_probability)
+                
+                # now make measurements
+                snapshot_batch = []
+                # iterate over batch (to be paralelized!)
+                #print(f"this is rho {rho}")
+                for rho_k, measurement_basis_probability_k in zip(rho, measurement_basis_probability):
+                    rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2]*self.num_qubits) #2 more
+                    #print(f"this is rho_k {rho_k}")
+                    snapshot_batch.append(self.take_snapshot(rho_k, measurement_basis_probability_k))
+                snapshot_batch = torch.Tensor(snapshot_batch).to(snapshot.device)
+                basis_predictor_input = torch.cat((snapshot_batch, measurement_basis_probability.view(-1, self.basis_dim)), dim=-1)
+                snapshots_with_basis_vector.append(basis_predictor_input)
+                basis_vectors.append(measurement_basis_probability)
+                #sqrt on basis vectors
         # now make the reconstruction
         # unfold over snapshots
         #print(basis_vectors)
+        file.write(" ")
         rho_reconstructed = []
         for snapshot_with_basis in snapshots_with_basis_vector:
             rho_reconstructed_s = torch.zeros(rho.shape[0], rho.shape[-1]**self.num_qubits, rho.shape[-2]**self.num_qubits).to(torch.complex64).to(self.device) #changed to rho.shape[-1] form rho.shape[-2]
