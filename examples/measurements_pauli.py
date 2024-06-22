@@ -63,7 +63,8 @@ print(np.around(rho1, 3))
 #number_qubits = [2, 4, 6, 8, 10, 12]
 number_qubits = [2, 4, 6, 8, 10, 12]
 #set_of_T = [10, 100, 1000, 10000, 100000]
-set_of_T = [20, 50, 100, 150, 200]
+#set_of_T = [20, 50, 100, 150, 200]
+set_of_T = [2, 3, 5, 10, 20, 50, 100, 150, 200]
 
 all_data = []
 for qubit in number_qubits:
@@ -88,11 +89,13 @@ for qubit in number_qubits:
     print(f"rho0 shape: {rho0.shape}")
     #print(f"rho0: {rho0}")
     norms = []
+    mse = []
     for t in set_of_T: 
         print(f"Start {t}")
         snapshots = measure_shadow(t, qubit)
         rho1 = reconstruct_from_shadow(t, rho0, snapshots, space_size, qubit)
-        norms.append(np.linalg.norm(rho0.reshape(space_size,space_size)-rho1.reshape(space_size,space_size)))
+        norms.append(np.linalg.norm(rho0.reshape(space_size,space_size).real-rho1.reshape(space_size,space_size)))
+        mse.append(np.mean((rho0.reshape(space_size, space_size).real - rho1.reshape(space_size, space_size).real)**2))
     
     
     #np.set_printoptions(linewidth=200)
@@ -119,8 +122,10 @@ for qubit in number_qubits:
     fig, ax = plt.subplots()
     
     # Save x, y data to file
-    data = np.array([set_of_T, norms]).T
-    np.savetxt(f'{qubit}_data_to_compare.txt', data, delimiter=',', header='x, y', fmt='%.2f')
+    #data = np.array([set_of_T, norms]).T
+    #np.savetxt(f'{qubit}_data_to_compare.txt', data, delimiter=',', header='x, y', fmt='%.2f')
+    data_mse = np.array([set_of_T, mse]).T
+    np.savetxt(f'{qubit}_data_to_compare.txt', data_mse, delimiter=',', header='x, y', fmt='%.2f')
    
   
     '''
