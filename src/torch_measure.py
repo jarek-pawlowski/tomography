@@ -10,7 +10,16 @@ from qiskit.quantum_info import concurrence, DensityMatrix
 from src.utils_measure import Tomography, Kwiat_projectors, Kwiat_library, basis_for_Kwiat_code
 
 
-def tensordot(a: torch.Tensor, b: torch.Tensor, indices: t.Tuple[t.List[int], t.List[int]] = ([1], [0]), moveaxis=None):
+def tensordot(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    indices: t.Tuple[t.List[int], t.List[int]] = ([1], [0]),
+    moveaxis: t.Optional[t.Tuple[int, ...]] = None,
+    conj_tr: t.Tuple[bool, bool] = (False, False)
+) -> torch.Tensor:
+    
+    a = torch.conj(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
+    b = torch.conj(b.T) if conj_tr[1] else b  # warning: transposing reverses tensor indices
     result = torch.tensordot(a, b, indices)
     if moveaxis is not None:
         result = torch.moveaxis(result, *moveaxis)
@@ -150,3 +159,27 @@ def test_reconstruction_measurement_noise_for_variance(
                 variance_metrics[name] += ((error * weights).sum() / weights.sum()).item() / len(test_loader)
 
     return variance_metrics
+
+
+def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True):
+        num_measurements = measurements.shape[0]
+        num_gammas = gammas.shape[0]
+        B = torch.zeros((num_measurements, num_gammas), dtype=torch.complex64, device=measurements.device)
+        for nu in range(num_measurements):
+            for mu in range(num_gammas):
+                B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+        B_inv = torch.linalg.inv(B)
+        # B_inv = torch.linalg.pinv(B)
+        r = torch.matmul(B_inv, measurements.to(torch.complex64))
+        rho = tensordot(gammas, r, indices=([0], [0]))
+        if enforce_valid_density_matrix:
+            # make rho hermitian
+            rho = (rho + torch.conj(rho.T)) / 2
+            # normalize to trace 1
+            if rho.trace() == 0:
+                raise ValueError('Trace of density matrix is zero')
+            rho = rho / rho.trace()
+            # make rho positive semidefinite
+            eigs = torch.amin(torch.linalg.eigvalsh(rho))
+            if eigs < 0.: rho -= torch.eye(rho.shape[-1])*eigs   
+        return rho

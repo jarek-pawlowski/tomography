@@ -83,10 +83,12 @@ class SequentialMeasurementPredictor(nn.Module):
         measurement_with_basis = torch.cat((measurement, basis_as_vector), dim=-1)
 
         reconstructed_matrices = []
+        predicted_bases = [basis]
         for i in range(self.max_num_measurements):
             reconstructed_matrix = self.matrix_reconstructors[i](measurement_with_basis)
             measurement_basis_vectors = self.measurement_predictors[i](measurement_with_basis)
             new_measurement_with_basis = []
+            new_predicted_bases = []
             for rho_k, measurement_basis_vector in zip(rho, measurement_basis_vectors):
                 rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
                 basis_vectors = measurement_basis_vector.view(2, 2, 2)
@@ -103,18 +105,30 @@ class SequentialMeasurementPredictor(nn.Module):
                 new_measurement = measure(rho_k, (basis_matrices[0], basis_matrices[1]))
                 new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(basis.shape[1]*2*2*2)
                 new_measurement_with_basis.append(torch.cat((new_measurement.unsqueeze(0), new_basis_as_vector), dim=-1))
+                new_predicted_bases.append(basis_matrices)
 
             new_measurement_with_basis = torch.stack(new_measurement_with_basis, dim=0)
             measurement_with_basis = torch.cat([measurement_with_basis, new_measurement_with_basis], dim=1)
             reconstructed_matrices.append(reconstructed_matrix)
+            predicted_bases.append(torch.stack(new_predicted_bases, dim=0))
+
         reconstructed_matrices = torch.stack(reconstructed_matrices, dim=1)
-        return reconstructed_matrices
+        predicted_bases = torch.stack(predicted_bases[:-1], dim=1) # last measurement base is unused
+        return reconstructed_matrices, predicted_bases
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)
 
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
+
+
+class SequentialMeasurementPredictorForConcurrence(SequentialMeasurementPredictor):
+    def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(SequentialMeasurementPredictorForConcurrence, self).__init__(num_qubits, layers, hidden_size, max_num_measurements)
+        self.matrix_reconstructors = nn.ModuleList([
+            ConcurrencePredictor(i *(1 + num_qubits*2*4), num_qubits, layers, hidden_size) for i in range(1, max_num_measurements + 1)
+        ])
 
 
 class RecurrentMeasurementPredictor(nn.Module):
@@ -136,11 +150,13 @@ class RecurrentMeasurementPredictor(nn.Module):
         reconstructed_matrix = torch.zeros((measurement.shape[0], self.dens_matrix_dim), device=measurement.device)
 
         reconstructed_matrices = []
+        predicted_bases = [basis]
         for i in range(self.max_num_measurements):
             reconstructor_input = torch.cat((measurement_predictor_input, reconstructed_matrix), dim=-1)
             reconstructed_matrix = self.matrix_reconstructor(reconstructor_input)
             measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
             new_measurement_predictor_input = []
+            new_predicted_bases = []
             for rho_k, measurement_basis_vector in zip(rho, measurement_basis_vectors):
                 rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
                 basis_vectors = measurement_basis_vector.view(2, 2, 2)
@@ -157,12 +173,16 @@ class RecurrentMeasurementPredictor(nn.Module):
                 new_measurement = measure(rho_k, (basis_matrices[0], basis_matrices[1]))
                 new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(basis.shape[1]*2*2*2)
                 new_measurement_predictor_input.append(torch.cat((new_measurement.unsqueeze(0), new_basis_as_vector), dim=-1))
+                new_predicted_bases.append(basis_matrices)
 
             measurement_predictor_input = torch.stack(new_measurement_predictor_input, dim=0)
             reconstructed_matrices.append(reconstructed_matrix)
             reconstructed_matrix = reconstructed_matrix.view(-1, self.dens_matrix_dim)
+            predicted_bases.append(torch.stack(new_predicted_bases, dim=0))
+
+        predicted_bases = torch.stack(predicted_bases[:-1], dim=1) # last measurement base is unused
         reconstructed_matrices = torch.stack(reconstructed_matrices, dim=1)
-        return reconstructed_matrices
+        return reconstructed_matrices, predicted_bases
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)
@@ -254,7 +274,7 @@ class LSTMMeasurementPredictor(nn.Module):
         basis_matrices[..., 0, 1] = basis_vectors[..., 0] * basis_vectors[..., 1].conj()
         basis_matrices[..., 1, 0] = basis_vectors[..., 1] * basis_vectors[..., 0].conj() 
         basis_matrices /= torch.vmap(torch.trace, in_dims=(0, 1))(basis_matrices)
-        return basis_matrices
+        return basis_matrices, (h_i, c_i)
     
     def reconstruction_inference(self, measurements: torch.Tensor, bases: torch.Tensor):
         '''
@@ -271,6 +291,13 @@ class LSTMMeasurementPredictor(nn.Module):
 
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
+
+
+class LSTMMeasurementPredictorForConcurrence(LSTMMeasurementPredictor):
+    def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(LSTMMeasurementPredictorForConcurrence, self).__init__(num_qubits, layers, hidden_size, max_num_measurements)
+        self.matrix_reconstructor = LSTMConcurrencePredictor(1 + self.basis_dim, num_qubits, layers, hidden_size, bias=True)
+        
 
 
 class LSTMMeasurementSelector(nn.Module):
@@ -359,6 +386,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
         self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size, bias=True)
 
     def forward(self, all_measurements: t.List[t.Tuple[torch.Tensor, torch.Tensor]], rho: torch.Tensor):
+        # in current implementation it seems that selector starts from the last measurment of the Kwiat basis, while reconstructor starts from the first one -- corrected in fixed model
         target_measurements_with_basis = []
         for measurment_tuple in all_measurements:
             measurement, basis = measurment_tuple
@@ -382,6 +410,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
             for target_measurement_with_basis in target_measurements_with_basis
         ], dim=1)
         total_target_measurements_matrices = [target_measurements_matrices]
+        measurement_predictor_input = target_measurements_with_basis[0] # it was unused before!!
         for i in range(self.max_num_measurements - 1):
             # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
             h_i, c_i  = self.measurement_selector(measurement_predictor_input, (h_i, c_i))
@@ -419,11 +448,44 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
         total_target_measurements_matrices = torch.stack(total_target_measurements_matrices, dim=1) # shape (batch, max_num_measurements, len(all_measurements), 2, 2**num_qubits, 2**num_qubits)
         return predicted_measurements_matrices, predicted_bases_probabilites, total_target_measurements_matrices
 
+    def measurement_inference(self, measurement: torch.Tensor, basis: torch.Tensor, h_i: t.Optional[torch.Tensor] = None, c_i: t.Optional[torch.Tensor] = None):
+        '''
+        measurement: (batch, 1) 
+        basis: (batch, num_qubits, 2, 2)
+        '''
+        basis_as_vector = torch.stack((basis.real, basis.imag), dim=-1).view(-1, basis.shape[1]*self.num_qubits*2*2)
+        measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+
+        if h_i is None:
+            h_i = torch.randn((measurement.shape[0], self.measurement_predictor.hidden_size), device=measurement.device)
+        if c_i is None:
+            c_i = torch.randn((measurement.shape[0], self.measurement_predictor.hidden_size), device=measurement.device)
+
+        h_i, c_i  = self.measurement_selector(measurement_predictor_input, (h_i, c_i))
+        measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
+        return measurement_basis_probability, (h_i, c_i)
+
+    def reconstruction_inference(self, measurements: torch.Tensor, bases: torch.Tensor):
+        '''
+        measurements: (batch, num_measurements, 1)
+        bases: (batch, num_measurements, num_qubits, 2, 2)
+        '''
+        measurements, bases = measurements
+        basis_as_vector = torch.stack((bases.real, bases.imag), dim=-1).view(-1, bases.shape[1], bases.shape[2]*self.num_qubits*2*2)
+        measurement_reconstructor_input = torch.cat((measurements, basis_as_vector), dim=-1)
+        return self.matrix_reconstructor(measurement_reconstructor_input)
+
     def save(self, path: str):
         torch.save(self.state_dict(), path)
 
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
+
+
+class LSTMDiscreteMeasurementSelectorForConcurrence(LSTMDiscreteMeasurementSelector):
+    def __init__(self, num_qubits: int , possible_basis_matrices: t.List[torch.Tensor], layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(LSTMDiscreteMeasurementSelectorForConcurrence, self).__init__(num_qubits, possible_basis_matrices, layers, hidden_size, max_num_measurements)
+        self.matrix_reconstructor = LSTMConcurrencePredictor(1 + self.basis_dim, num_qubits, layers, hidden_size, bias=True)
 
 
 class DensityMatrixReconstructor(nn.Module):
@@ -434,6 +496,45 @@ class DensityMatrixReconstructor(nn.Module):
 
     def forward(self, measurement_with_basis: torch.Tensor):
         return self.mlp(measurement_with_basis).view(-1, 2, 2 ** self.num_qubits, 2 ** self.num_qubits)
+    
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
+class GammasReconstructor(nn.Module):
+    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16, num_gammas: int = 1):
+        super(GammasReconstructor, self).__init__()
+        self.num_qubits = num_qubits
+        self.num_gammas = num_gammas
+        self.mlp = MLP(layers, input_dim, hidden_size, num_gammas * 2 * (4 ** num_qubits))
+
+    def forward(self, measurement_with_basis: torch.Tensor):
+        return self.mlp(measurement_with_basis).view(-1, self.num_gammas, 2, 2 ** self.num_qubits, 2 ** self.num_qubits)
+    
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
+class ConcurrencePredictor(nn.Module):
+    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16):
+        super(ConcurrencePredictor, self).__init__()
+        self.num_qubits = num_qubits
+        self.mlp = MLP(layers, input_dim, hidden_size, 1)
+
+    def forward(self, measurement_with_basis: torch.Tensor):
+        return self.mlp(measurement_with_basis).view(-1, 1)
+    
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
     
 
 class LSTMDensityMatrixReconstructor(nn.Module):
@@ -453,4 +554,36 @@ class LSTMDensityMatrixReconstructor(nn.Module):
     def forward(self, measurements_with_basis: torch.Tensor):
         out, _ = self.lstm(measurements_with_basis)
         return out.view(measurements_with_basis.shape[0], measurements_with_basis.shape[1], 2, 2 ** self.num_qubits, 2 ** self.num_qubits)
-    
+
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
+class LSTMConcurrencePredictor(nn.Module):
+    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16, bias: bool = True):
+        super(LSTMConcurrencePredictor, self).__init__()
+        self.num_qubits = num_qubits
+        self.batch_norm = nn.BatchNorm1d(input_dim)
+        self.lstm = nn.LSTM(input_dim, hidden_size, layers, proj_size=1, batch_first=True, bias=bias)
+
+    def reinitialize(self):
+        for name, p in self.named_parameters():
+            if 'lstm' in name:
+                if 'weight_ih' in name:
+                    nn.init.xavier_uniform_(p.data)
+                elif 'weight_hh' in name:
+                    nn.init.orthogonal_(p.data)
+
+    def forward(self, measurements_with_basis: torch.Tensor):
+        # batch_normed_measurements_with_basis = torch.stack([self.batch_norm(measurements_with_basis[:, i]) for i in range(measurements_with_basis.shape[1])], dim=1)
+        out, _ = self.lstm(measurements_with_basis)
+        return out.view(measurements_with_basis.shape[0], measurements_with_basis.shape[1], 1)
+
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))

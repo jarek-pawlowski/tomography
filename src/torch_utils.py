@@ -13,7 +13,8 @@ from torch.optim import Optimizer
 from torch.distributions.multivariate_normal import MultivariateNormal
 from qiskit.quantum_info import DensityMatrix, state_fidelity
 
-from src.utils_measure import Kwiat
+from src.torch_measure import measure, reconstruct
+from src.utils_measure import Kwiat, Kwiat_projectors, Gammas
 
 def train(
     model: nn.Module,
@@ -51,23 +52,34 @@ def train_measurement_predictor(
     epoch: int, 
     log_interval: int = 100, 
     criterion: t.Callable = nn.MSELoss(),
-    bases_loss_fn: t.Optional[t.Callable] = None
+    bases_loss_fn: t.Optional[t.Callable] = None,
+    mode: str = 'rho' # 'rho' or 'concurrence'
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
     model.to(device)
     metrics = {'train_loss': 0, 'bases_loss': 0}
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
-    for batch_idx, (rho, measurement, _) in pbar:
+    for batch_idx, (rho, measurement, concurrence) in pbar:
         rho, measurement = rho.to(device), measurement.to(device)
+        if mode == 'rho':
+            target = rho.to(device)
+        elif mode == 'concurrence':
+            target = concurrence.to(device)
+        else:
+            raise ValueError(f'Unknown mode: {mode}')
         optimizer.zero_grad()
         basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
         basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
         measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-        predicted_rhos, predicted_bases = model(measurement_with_basis, rho)
+        predicted_target, predicted_bases = model(measurement_with_basis, rho)
         loss = torch.zeros(1).to(device)
-        for i in range(predicted_rhos.shape[1]):
-            loss += criterion(predicted_rhos[:, i], rho)
+        for i in range(predicted_target.shape[1]):
+            if epoch < 10 and mode == 'concurrence':
+                predicted_target_with_noise = predicted_target[:, i] + torch.randn_like(predicted_target[:, i]) * 1e-3
+                loss += criterion(predicted_target_with_noise, target)
+            else:
+                loss += criterion(predicted_target[:, i], target)
         if bases_loss_fn is not None:
             bases_loss = bases_loss_fn(predicted_bases)
             metrics['bases_loss'] += bases_loss.item()
@@ -79,6 +91,107 @@ def train_measurement_predictor(
             pbar.set_postfix({'loss': loss.item()})
     metrics['train_loss'] /= len(train_loader)
     metrics['bases_loss'] /= len(train_loader)
+    return metrics
+
+
+def train_reconstructor(
+    model: nn.Module,
+    device: torch.device, 
+    train_loader: DataLoader, 
+    optimizer: Optimizer, 
+    epoch: int, 
+    log_interval: int = 100, 
+    criterion: t.Callable = nn.MSELoss(),
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None
+) -> t.Dict[str, t.List[float]]:
+    
+    model.train()
+    model.to(device)
+    metrics = {'train_loss': 0}
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = two_qubits_basis_matrices
+    num_qubits = 2
+
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    for batch_idx, (rho, measurement, _) in pbar:
+        rho, measurement = rho.to(device), measurement.to(device)
+        optimizer.zero_grad()
+        if type(measurements_subset) == int:
+            measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+        if measurements_subset is not None:
+            measurement = measurement[:, measurements_subset]
+            selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
+            
+        selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+        basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+        measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+        predicted_rhos = model(measurement_predictor_input)
+        loss = criterion(predicted_rhos, rho)
+        loss.backward()
+        optimizer.step()
+        metrics['train_loss'] += loss.item()
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'loss': loss.item()})
+    metrics['train_loss'] /= len(train_loader)
+    return metrics
+
+
+def train_gammas_reconstructor(
+    model: nn.Module,
+    device: torch.device, 
+    train_loader: DataLoader, 
+    optimizer: Optimizer, 
+    epoch: int, 
+    log_interval: int = 100, 
+    criterion: t.Callable = nn.MSELoss(),
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    model_input_info: str = 'full' # 'full', 'measurement' or 'measurement_basis'
+) -> t.Dict[str, t.List[float]]:
+    
+    model.train()
+    model.to(device)
+    metrics = {'train_loss': 0}
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = two_qubits_basis_matrices
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    selected_projection_vectors = two_qubits_projection_vectors
+    num_qubits = 2
+
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    for batch_idx, (rho, measurement, _) in pbar:
+        rho, measurement = rho.to(device), measurement.to(device)
+        optimizer.zero_grad()
+        if type(measurements_subset) == int:
+            measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+        if measurements_subset is not None:
+            measurement = measurement[:, measurements_subset]
+            selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
+            selected_projection_vectors = two_qubits_projection_vectors[measurements_subset]
+            
+        selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+        basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+        if model_input_info == 'full':
+            measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+        elif model_input_info == 'measurement':
+            measurement_predictor_input = measurement
+        elif model_input_info == 'measurement_basis':
+            measurement_predictor_input = basis_as_vector
+        else:
+            raise ValueError(f'Unknown model_input_info: {model_input_info}')
+        predicted_gammas = model(measurement_predictor_input)
+        complex_gammas = torch.complex(predicted_gammas[:, :, 0], predicted_gammas[:, :, 1])
+        reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, gammas_i) for measurement_i, gammas_i in zip(measurement, complex_gammas)])
+        reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+        loss = criterion(reconstructed_rho, rho)
+        loss.backward()
+        optimizer.step()
+        metrics['train_loss'] += loss.item()
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'loss': loss.item()})
+    metrics['train_loss'] /= len(train_loader)
     return metrics
 
 
@@ -94,6 +207,7 @@ def train_discrete_measurement_selector(
     selector_criterion: t.Callable = nn.CrossEntropyLoss(),
     num_reconstructor_repeats: int = 1,
     num_selector_repeats: int = 1,
+    mode: str = 'rho' # 'rho' or 'concurrence'
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
@@ -107,9 +221,16 @@ def train_discrete_measurement_selector(
     qubits_bases = torch.stack(qubits_bases)
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
-    for batch_idx, (rho, measurement, _) in pbar:
+    for batch_idx, (rho, measurement, concurrence) in pbar:
         rho, measurement = rho.to(device), measurement.to(device)
         qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
+
+        if mode == 'rho':
+            target = rho.to(device)
+        elif mode == 'concurrence':
+            target = concurrence.to(device)
+        else:
+            raise ValueError(f'Unknown mode: {mode}')
 
         measurement_with_basis = [
             (measurement[:, i:i+1], qubits_bases_batch[:, i])
@@ -118,13 +239,16 @@ def train_discrete_measurement_selector(
 
         for _ in range(num_selector_repeats):
             selector_optimizer.zero_grad()
-            _, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho)
+            _, predicted_bases_probabilities, predicted_all_targets = model(measurement_with_basis, rho)
             selector_loss = torch.zeros(1).to(device)
             for i in range(1, predicted_bases_probabilities.shape[1]):
                 probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[:, i, j] for j in range(predicted_bases_probabilities.shape[2])])
-                reconstruction_losses = torch.nn.functional.mse_loss(predicted_all_rhos[:, i, 1:], rho.unsqueeze(1).expand(-1, predicted_all_rhos.shape[2] - 1, *rho.shape[1:]), reduction='none') # skipping the first basis as it is always chosen as the first measurement
-                mean_reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
-                mean_reconstruction_losses_with_noise = mean_reconstruction_losses + torch.randn_like(mean_reconstruction_losses) * 1e-3
+                reconstruction_losses = torch.nn.functional.mse_loss(predicted_all_targets[:, i, 1:], target.unsqueeze(1).expand(-1, predicted_all_targets.shape[2] - 1, *target.shape[1:]), reduction='none') # skipping the first basis as it is always chosen as the first measurement
+                if mode == 'rho':
+                    reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
+                elif mode == 'concurrence':
+                    reconstruction_losses = reconstruction_losses.squeeze(-1)
+                mean_reconstruction_losses_with_noise = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
                 best_measurement_ids = torch.argmin(mean_reconstruction_losses_with_noise, dim=1).detach() + 1  # shifting by 1 as the first measurement is skipped
                 selector_loss_i = selector_criterion(input=probabilites, target=best_measurement_ids)
                 selector_loss += selector_loss_i
@@ -136,10 +260,10 @@ def train_discrete_measurement_selector(
 
         for _ in range(num_reconstructor_repeats):
             reconstructor_optimizer.zero_grad()
-            predicted_best_rhos, _, _ = model(measurement_with_basis, rho)
+            predicted_best_targets, _, _ = model(measurement_with_basis, rho)
             reconstructor_loss = torch.zeros(1).to(device)
-            for i in range(predicted_best_rhos.shape[1]):
-                reconstructor_loss += reconstructor_criterion(predicted_best_rhos[:, i], rho)
+            for i in range(predicted_best_targets.shape[1]):
+                reconstructor_loss += reconstructor_criterion(predicted_best_targets[:, i], target)
 
             reconstructor_loss.backward()
             reconstructor_optimizer.step()
@@ -181,6 +305,7 @@ def test_measurement_predictor(
     test_loader: DataLoader,
     criterions: t.Dict[str, t.Callable],
     max_num_measurements: int = 16,
+    mode: str = 'rho' # 'rho' or 'concurrence'
 ) -> t.Dict[str, t.List[float]]:
         
     model.eval()
@@ -188,19 +313,159 @@ def test_measurement_predictor(
     
     metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
     with torch.no_grad():
-        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+        for rho, measurement, concurrence in tqdm(test_loader, desc='Testing model...'):
             rho, measurement = rho.to(device), measurement.to(device)
+            if mode == 'rho':
+                target = rho.to(device)
+            elif mode == 'concurrence':
+                target = concurrence.to(device)
+            else:
+                raise ValueError(f'Unknown mode: {mode}')
             basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
             basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
             measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
-            predicted_rhos, predicted_bases = model(measurement_with_basis, rho)        
+            predicted_target, _ = model(measurement_with_basis, rho)        
             for name, criterion in criterions.items():
-                for i in range(predicted_rhos.shape[1]):
-                    metrics[name][f'measurement {i}'] += criterion(predicted_rhos[:, i], rho).item()
+                for i in range(predicted_target.shape[1]):
+                    metrics[name][f'measurement {i}'] += criterion(predicted_target[:, i], target).item()
     for name in metrics.keys():
         for i in range(max_num_measurements):
             metrics[name][f'measurement {i}'] /= len(test_loader)
             print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
+    return metrics
+
+
+def test_reconstructor(
+    model: nn.Module,
+    device: torch.device, 
+    test_loader: DataLoader, 
+    criterions: t.Dict[str, t.Callable],
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None
+) -> t.Dict[str, t.List[float]]:
+    
+    model.eval()
+    model.to(device)
+    metrics = {name: 0 for name in criterions.keys()}
+
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = two_qubits_basis_matrices
+    num_qubits = 2
+
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            if type(measurements_subset) == int:
+                measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+            if measurements_subset is not None:
+                measurement = measurement[:, measurements_subset]
+                selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
+                
+            selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+            basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+            measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+            predicted_rhos = model(measurement_predictor_input)
+            
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(predicted_rhos, rho).item()
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        print(f'{name}: {metrics[name]:.4f}')
+    return metrics
+
+
+def test_gammas_reconstructor(
+    model: nn.Module,
+    device: torch.device, 
+    test_loader: DataLoader, 
+    criterions: t.Dict[str, t.Callable],
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    model_input_info: str = 'full' # 'full', 'measurement' or 'measurement_basis'
+) -> t.Dict[str, t.List[float]]:
+    
+    model.eval()
+    model.to(device)
+    metrics = {name: 0 for name in criterions.keys()}
+
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = two_qubits_basis_matrices
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    selected_projection_vectors = two_qubits_projection_vectors
+    num_qubits = 2
+
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            if type(measurements_subset) == int:
+                measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+            if measurements_subset is not None:
+                measurement = measurement[:, measurements_subset]
+                selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
+                selected_projection_vectors = two_qubits_projection_vectors[measurements_subset]
+                
+            selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+            basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+            if model_input_info == 'full':
+                measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+            elif model_input_info == 'measurement':
+                measurement_predictor_input = measurement
+            elif model_input_info == 'measurement_basis':
+                measurement_predictor_input = basis_as_vector
+            else:
+                raise ValueError(f'Unknown model_input_info: {model_input_info}')
+            predicted_gammas = model(measurement_predictor_input)
+            complex_gammas = torch.complex(predicted_gammas[:, :, 0], predicted_gammas[:, :, 1])
+            reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, gammas_i) for measurement_i, gammas_i in zip(measurement, complex_gammas)])
+            reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(reconstructed_rho, rho).item()
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        print(f'{name}: {metrics[name]:.4f}')
+    return metrics
+
+
+def test_kwiat_gammas_reconstruction(
+    device: torch.device, 
+    test_loader: DataLoader, 
+    criterions: t.Dict[str, t.Callable],
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None
+) -> t.Dict[str, t.List[float]]:
+    
+    metrics = {name: 0 for name in criterions.keys()}
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = two_qubits_basis_matrices
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    selected_projection_vectors = two_qubits_projection_vectors
+    # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+    gammas = torch.func.vmap(torch.kron)(two_qubits_basis_matrices[:, 0], two_qubits_basis_matrices[:, 1])
+    selected_gammas = gammas
+
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            if type(measurements_subset) == int:
+                measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+            if measurements_subset is not None:
+                measurement = measurement[:, measurements_subset]
+                selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
+                selected_projection_vectors = two_qubits_projection_vectors[measurements_subset]
+                selected_gammas = gammas[measurements_subset]
+                
+            selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+            reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, selected_gammas, enforce_valid_density_matrix=True) for measurement_i in measurement])
+            reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(reconstructed_rho, rho).item()
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        print(f'{name}: {metrics[name]:.4f}')
     return metrics
 
 
@@ -210,6 +475,7 @@ def test_discrete_measurement_selector(
     test_loader: DataLoader,
     criterions: t.Dict[str, t.Callable],
     max_num_measurements: int = 16,
+    mode: str = 'rho' # 'rho' or 'concurrence'
 ) -> t.Dict[str, t.List[float]]:
         
     model.eval()
@@ -224,17 +490,24 @@ def test_discrete_measurement_selector(
     
     metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
     with torch.no_grad():
-        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+        for rho, measurement, concurrence in tqdm(test_loader, desc='Testing model...'):
             rho, measurement = rho.to(device), measurement.to(device)
             qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
             measurement_with_basis = [
                 (measurement[:, i:i+1], qubits_bases_batch[:, i])
                 for i in range(measurement.shape[1])
             ]
-            predicted_best_rhos, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho)
+            if mode == 'rho':
+                target = rho.to(device)
+            elif mode == 'concurrence':
+                target = concurrence.to(device)
+            else:
+                raise ValueError(f'Unknown mode: {mode}')
+            
+            predicted_best_targets, _, _ = model(measurement_with_basis, rho)
             for name, criterion in criterions.items():
-                for i in range(predicted_best_rhos.shape[1]):
-                    metrics[name][f'measurement {i}'] += criterion(predicted_best_rhos[:, i], rho).item()
+                for i in range(predicted_best_targets.shape[1]):
+                    metrics[name][f'measurement {i}'] += criterion(predicted_best_targets[:, i], target).item()
     for name in metrics.keys():
         for i in range(max_num_measurements):
             metrics[name][f'measurement {i}'] /= len(test_loader)
@@ -552,3 +825,49 @@ def reconstruct_rho(
         predicted_base_idx = torch.unflatten(predicted_base_idx, dim=0, sizes=(predicted_bases.shape[1], predicted_bases.shape[2]))
         rho_diff = torch.abs(predicted_rhos - rho.unsqueeze(1))
     return predicted_rhos.squeeze(), rho_diff.squeeze(), predicted_base_idx.squeeze()
+
+
+def collect_kwiat_measurements_basis_probabilities_from_discrete_model(
+        model: nn.Module,
+        device: torch.device,
+        first_measurement: torch.Tensor,
+        rho: torch.Tensor,
+):
+    model.eval()
+    model.to(device)
+
+    bases = [
+        torch.from_numpy(base).to(device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases)
+
+    rho, first_measurement = rho.to(device), first_measurement.to(device)
+    measurement_with_basis = [
+        (first_measurement[i:i+1].unsqueeze(0), qubits_bases[i].unsqueeze(0))
+        for i in range(first_measurement.shape[0])
+    ]
+    predicted_best_rhos, predicted_bases_probabilities, predicted_all_rhos = model(measurement_with_basis, rho.unsqueeze(0))
+    probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[0, :, j] for j in range(predicted_bases_probabilities.shape[2])])
+    return probabilites, predicted_best_rhos[0]
+
+
+def collect_measurements_outputs_from_model(
+        model: nn.Module,
+        device: torch.device,
+        first_measurement: torch.Tensor,
+        rho: torch.Tensor,
+):
+    model.eval()
+    model.to(device)
+
+    rho, first_measurement = rho.to(device).unsqueeze(0), first_measurement.to(device).unsqueeze(0)
+    basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
+    basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
+    measurement_with_basis = (first_measurement[:, 0:1], torch.stack((basis, basis), dim=1))
+
+    predicted_rhos, predicted_bases = model(measurement_with_basis, rho)
+    rho_complex = torch.complex(rho[0, 0], rho[0, 1]).view(*[2, 2]*2)
+    measurements = torch.stack([measure(rho_complex, (basis_i[0], basis_i[1])) for basis_i in predicted_bases[0]])
+    return predicted_bases[0], measurements, predicted_rhos[0]

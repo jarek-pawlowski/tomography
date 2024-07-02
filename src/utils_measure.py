@@ -40,6 +40,8 @@ G14 = np.kron(PauliZ,PauliY)/2
 G15 = np.kron(PauliZ,PauliZ)/2
 G16 = np.kron(Pauli0,Pauli0)/2
 
+Gammas = np.array([G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G15, G16])
+
 class Tomography:
     # stuff for tomography (PHYSICAL REVIEW A, VOLUME 64, 052312)
     def __init__(self, no_qubits, single_qubit_projectors): 

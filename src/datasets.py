@@ -65,12 +65,21 @@ class VectorDensityMatrixDataset(DensityMatrixDataset):
 
 
 class MeasurementDataset(DensityMatrixDataset):
-    def __init__(self, root_path: str, return_density_matrix: bool = False, data_limit: t.Optional[int] = None, binary_label: bool = False, mask_measurements: t.Optional[t.List] = None) -> None:
+    def __init__(
+        self,
+        root_path: str,
+        return_density_matrix: bool = False,
+        data_limit: t.Optional[int] = None,
+        binary_label: bool = False,
+        mask_measurements: t.Optional[t.List] = None,
+        measurement_subset: t.Optional[t.List] = None
+    ) -> None:
         super().__init__(root_path)
         self.measurement = Measurement(Kwiat, 2)
         self.return_density_matrix = return_density_matrix
         self.binary_label = binary_label
         self.mask_measurements = mask_measurements
+        self.measurement_subset = measurement_subset
         if data_limit is not None:
             self.dict = self.dict[:data_limit]
 
@@ -84,6 +93,8 @@ class MeasurementDataset(DensityMatrixDataset):
         measurements = self._get_all_measurements(matrix)
         if self.mask_measurements is not None:
             measurements = np.array([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
+        if self.measurement_subset is not None:
+            measurements = np.array([measurement for i, measurement in enumerate(measurements) if i in self.measurement_subset])
         tensor = torch.from_numpy(measurements).float()
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)
@@ -94,6 +105,40 @@ class MeasurementDataset(DensityMatrixDataset):
             return (tensor, label)
         return (rho, tensor, label)
     
+    def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
+        m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
+        return m_all
+
+
+class DerandomizedTestMeasurementDataset(Dataset):
+    def __init__(self, root_path: str) -> None:
+        self.root_dir = root_path
+        self.file_names = sorted(os.listdir(root_path))
+        self.measurement = Measurement(Kwiat, 2)
+
+    def __len__(self) -> int:
+        return len(self.file_names)
+    
+    def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
+        filename = self.file_names[idx]
+        matrix = self.read_matrix(filename)
+        rho = self.convert_numpy_matrix_to_tensor(matrix)
+        matrix = matrix.reshape((2, 2, 2, 2))
+        measurements = self._get_all_measurements(matrix)
+        tensor = torch.from_numpy(measurements).float()
+        return (rho, tensor)
+
+    def read_matrix(self, filename):
+        matrix_name = os.path.join(self.root_dir, filename)
+        matrix = np.load(matrix_name)
+        return matrix
+    
+    def convert_numpy_matrix_to_tensor(self, matrix: np.ndarray) -> torch.Tensor:
+        matrix_r = np.real(matrix)
+        matrix_im = np.imag(matrix)
+        tensor = torch.from_numpy(np.stack((matrix_r, matrix_im), axis=0)).float()
+        return tensor
+
     def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
         m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
         return m_all

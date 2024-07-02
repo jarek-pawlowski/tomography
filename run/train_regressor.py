@@ -16,19 +16,21 @@ from src.logging import log_metrics_to_file, plot_metrics_from_file
 def main():
     # load data
     batch_size = 512
-    train_dataset = MeasurementDataset(root_path='./data/train/', mask_measurements=[0])
-    test_dataset = MeasurementDataset(root_path='./data/val/', mask_measurements=[0])
+    train_dataset = MeasurementDataset(root_path='./data/train/', measurement_subset=[0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15])
+    test_dataset = MeasurementDataset(root_path='./data/val/', measurement_subset=[0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15])
     # train_dataset = VectorDensityMatrixDataset(root_path='./data/train/')
     # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
+    model_name = 'regressor_m0_1_2_3_4_5_6_7_10_11_14_15'
+
     # create model
-    model_save_path = './models/regressor_masked_0.pt'
+    model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
-    'input_dim': 16,
+    'input_dim': 12,
     'output_dim': 1,
     'layers': 2,
     'hidden_size': 128,
@@ -38,7 +40,7 @@ def main():
     model = Regressor(**model_params)
 
     # train & test model
-    log_path = './logs/regressor_masked_0.log'
+    log_path = f'./logs/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -59,7 +61,7 @@ def main():
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-    plot_metrics_from_file(log_path, title='Loss', save_path='./plots/regressor_masked_0.png')
+    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{model_name}.png')
 
 
 if __name__ == '__main__':
