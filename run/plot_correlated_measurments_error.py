@@ -24,7 +24,10 @@ def main():
     log_path_zeroed_tomography = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_zeroed_tomography.log'
     log_path_mle_intensity = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized_intensity.log'
     log_path_mle = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.log'
-    plot_path = './plots/correlated_measurements_error.png'
+    plot_path = './plots/correlated_measurements_error_mse.png'
+
+    metric_to_plot = 'test_loss'
+    fixed_metric_name = 'test_mse_loss'
 
     # load data
     metrics_lstm = load_metrics_from_file(log_path_lstm)
@@ -38,35 +41,36 @@ def main():
     metrics_mle_intensity = load_metrics_from_file(log_path_mle_intensity)
     metrics_mle = load_metrics_from_file(log_path_mle)
 
+
     # add metric for all correct measurements in tomography
-    tomography_fixed_metrics = np.insert(metrics_tomography['bures_distance'], 0, 0)
+    tomography_fixed_metrics = np.insert(metrics_tomography[fixed_metric_name], 0, 0)
     tomography_fixed_metrics = np.flip(tomography_fixed_metrics)[1:]
 
-    zeroed_tomography_fixed_metrics = np.insert(metrics_zeroed_tomography['bures_distance'], 0, 0)
+    zeroed_tomography_fixed_metrics = np.insert(metrics_zeroed_tomography[fixed_metric_name], 0, 0)
     zeroed_tomography_fixed_metrics = np.flip(zeroed_tomography_fixed_metrics)[1:]
 
-    mle_intensity_fixed_metrics = np.insert(metrics_mle_intensity['bures_distance'], 0, 0)
+    mle_intensity_fixed_metrics = np.insert(metrics_mle_intensity[fixed_metric_name], 0, 0)
     mle_intensity_fixed_metrics = np.flip(mle_intensity_fixed_metrics)[1:]
 
-    mle_fixed_metrics = np.insert(metrics_mle['bures_distance'], 0, 0)
+    mle_fixed_metrics = np.insert(metrics_mle[fixed_metric_name], 0, 0)
     mle_fixed_metrics = np.flip(mle_fixed_metrics)[1:]
 
     # plot
-    plt.plot(np.arange(1, 17), metrics_smp['bures_distance'], label='Arbitrary basis fully connected NN')
-    plt.plot(np.arange(1, 17), metrics_lstm['bures_distance'], label='Arbitrary basis LSTM')
-    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm['bures_distance'], label='Arbitrary basis LSTM with Kwiat basis loss')
-    plt.plot(np.arange(1, 17), metrics_lin_comb_lstm['bures_distance'], label='LSTM with linear combination of Kwiat basis')
-    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lin_comb_lstm['bures_distance'], label='LSTM with linear combination of Kwiat basis and loss')
-    plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm['bures_distance'], label='LSTM from discrete Kwiat basis')
+    plt.plot(np.arange(1, 17), metrics_smp[metric_to_plot], label='Arbitrary basis fully connected NN')
+    plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], label='Arbitrary basis LSTM')
+    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
+    plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')
+    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis and loss')
+    plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis')
     plt.plot(np.arange(1, 17), tomography_fixed_metrics, label='Kwiat basis tomography')
     plt.plot(np.arange(1, 17), zeroed_tomography_fixed_metrics, label='Kwiat basis tomography with zeroed measurements')
     plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, label='Kwiat basis MLE with intensity')
     plt.plot(np.arange(1, 17), mle_fixed_metrics, label='Kwiat basis MLE')
 
     plt.xticks(np.arange(1, 17))
-    plt.title('Bures distance for reconstructed density matrix')
+    plt.title('MSE for reconstructed density matrix')
     plt.xlabel('Number of measurements')
-    plt.ylabel('Bures distance') 
+    plt.ylabel('MSE') 
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.savefig(plot_path, bbox_inches='tight')
 

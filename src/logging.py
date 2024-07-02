@@ -2,6 +2,7 @@ import os
 import typing as t
 from math import floor, sqrt
 
+import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -103,7 +104,9 @@ def plot_map_from_files(
     metric_name: str,
     range_: t.Tuple[int, int],
     save_path: t.Optional[str] = None,
-    values_range: t.Optional[t.Tuple[float, float]] = None
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+    style: str = 'seaborn', # 'seaborn' or 'matplotlib'
+    title: str = ''
 ):
     metrics_values_for_xvalue = []
     for i in range(*range_):
@@ -114,7 +117,13 @@ def plot_map_from_files(
         idx = (np.abs(xvalues - xvalue)).argmin()
         metric_value = metrics_values[idx]
         metrics_values_for_xvalue.append(metric_value)
-    plot_error_map(metrics_values_for_xvalue, save_path, values_range, title=f'{metric_name} for {xaxis}={xvalue}')
+    metrics_values_for_xvalue = np.array(metrics_values_for_xvalue)
+    if style == 'seaborn':
+        plot_error_map_seaborn(metrics_values_for_xvalue, save_path, values_range, title=title)
+    elif style == 'matplotlib':
+        plot_error_map(metrics_values_for_xvalue, save_path, values_range, title=title)
+    else:
+        raise ValueError(f'Unrecognized style: {style}, should be one of: {["seaborn", "matplotlib"]}')
 
 
 def plot_map_from_file(
@@ -123,10 +132,16 @@ def plot_map_from_file(
     save_path: t.Optional[str] = None,
     values_range: t.Optional[t.Tuple[float, float]] = None,
     title: str = '',
+    style: str = 'seaborn', # 'seaborn' or 'matplotlib'
 ):
     metrics = load_metrics_from_file(path_to_file)
     metrics_values = metrics[metric_name]
-    plot_error_map(metrics_values, save_path, values_range, title=title)
+    if style == 'seaborn':
+        plot_error_map_seaborn(metrics_values, save_path, values_range, title=title)
+    elif style == 'matplotlib':
+        plot_error_map(metrics_values, save_path, values_range, title=title)
+    else:
+        raise ValueError(f'Unrecognized style: {style}, should be one of: {["seaborn", "matplotlib"]}')
 
 
 def plot_error_map(
@@ -134,6 +149,7 @@ def plot_error_map(
     save_path: t.Optional[str] = None,
     values_range: t.Optional[t.Tuple[float, float]] = None,
     title: str = '',
+    close: bool = True
 ):
 
     # plot matrix of metrics values for each file in range_ and value closest to xvalue
@@ -152,9 +168,6 @@ def plot_error_map(
         # also plot the text value of the metric in the center of the square
         # set color map to pretty colors and scale color according to min and max of metric values
         color = cmap(norm(metric_value))
-
-        label_i = f'{floor(i / matrix_dim)}_{i % matrix_dim}'
-
         axes.flat[i].text(0, 0, f'{metric_value:.4f}', ha='center', va='center', fontsize=8)
         axes.flat[i].set_xticks([0]) 
         axes.flat[i].set_xticklabels([i % matrix_dim])
@@ -175,7 +188,32 @@ def plot_error_map(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.show()
-    plt.close()
+    if close:
+        plt.close()
+
+
+def plot_error_map_seaborn(
+    metrics_values: np.ndarray,
+    save_path: t.Optional[str] = None,
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+    title: str = '',
+    close: bool = True
+):
+    if values_range is not None:
+        norm = plt.Normalize(vmin=values_range[0], vmax=values_range[1])
+        metrics_values = norm(metrics_values)
+    plt.figure(figsize=(15,12))
+    sns.set(font_scale=1.7)
+    sns.heatmap(
+        metrics_values.reshape((4,4)),
+        annot=True, fmt=".4f", linewidth=6.0
+    )
+    plt.title(title, size=22)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, format="png", bbox_inches="tight")
+    plt.show()
+    if close:
+        plt.close()
 
 
 def plot_matrices(
