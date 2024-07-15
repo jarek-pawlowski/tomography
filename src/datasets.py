@@ -72,14 +72,16 @@ class MeasurementDataset(DensityMatrixDataset):
         data_limit: t.Optional[int] = None,
         binary_label: bool = False,
         mask_measurements: t.Optional[t.List] = None,
-        measurement_subset: t.Optional[t.List] = None
+        measurement_subset: t.Optional[t.List] = None,
+        num_qubits: int = 2,
     ) -> None:
         super().__init__(root_path)
-        self.measurement = Measurement(Kwiat, 2)
+        self.measurement = Measurement(Kwiat, num_qubits)
         self.return_density_matrix = return_density_matrix
         self.binary_label = binary_label
         self.mask_measurements = mask_measurements
         self.measurement_subset = measurement_subset
+        self.num_qubits = num_qubits
         if data_limit is not None:
             self.dict = self.dict[:data_limit]
 
@@ -88,7 +90,8 @@ class MeasurementDataset(DensityMatrixDataset):
         matrix = self.read_matrix(filename)
         rho = self.convert_numpy_matrix_to_tensor(matrix)
 
-        # reshape density matrix from (4, 4) to (2, 2, 2, 2)
+        # reshape density matrix from (4, 4) to (2, 2, 2, 2) in case of 2 qubits
+        # is it possible to generalize this? e.g. (16, 16) to (2, 2, 2, 2, 2, 2, 2, 2) for 3 qubits?
         matrix = matrix.reshape((2, 2, 2, 2))
         measurements = self._get_all_measurements(matrix)
         if self.mask_measurements is not None:

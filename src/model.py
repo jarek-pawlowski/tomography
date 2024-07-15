@@ -52,8 +52,8 @@ class Regressor(nn.Module):
     def save(self, path: str):
         torch.save(self.state_dict(), path)
 
-    def load(self, path: str):
-        self.load_state_dict(torch.load(path))
+    def load(self, path: str, **kwargs):
+        self.load_state_dict(torch.load(path, **kwargs))
 
 
 class Classifier(Regressor):
@@ -513,6 +513,28 @@ class GammasReconstructor(nn.Module):
 
     def forward(self, measurement_with_basis: torch.Tensor):
         return self.mlp(measurement_with_basis).view(-1, self.num_gammas, 2, 2 ** self.num_qubits, 2 ** self.num_qubits)
+    
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
+class TomographyCorrectionsPredictor(nn.Module):
+    def __init__(self, input_dim: int, num_measurements: int,  num_gammas: int = 1, layers: int = 2, hidden_size: int = 16):
+        super(TomographyCorrectionsPredictor, self).__init__()
+        self.num_measurements = num_measurements
+        self.num_gammas = num_gammas
+        self.mlp = MLP(layers, input_dim, hidden_size, 2 * num_gammas * (num_measurements + 1))
+
+    def forward(self, measurement_with_basis: torch.Tensor): # maybe gamma should be also added as input?
+        corrections = self.mlp(measurement_with_basis)
+        inverse_corrections = corrections[..., :2*self.num_measurements*self.num_gammas]
+        inverse_corrections = inverse_corrections.view(*inverse_corrections.shape[:-1], 2, self.num_measurements, self.num_gammas)
+        r_corrections = corrections[..., 2*self.num_measurements*self.num_gammas:]
+        r_corrections = r_corrections.view(*r_corrections.shape[:-1], 2, self.num_gammas)
+        return inverse_corrections, r_corrections
     
     def save(self, path: str):
         torch.save(self.state_dict(), path)

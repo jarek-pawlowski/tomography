@@ -24,6 +24,9 @@ def main():
     log_path_zeroed_tomography = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_zeroed_tomography.log'
     log_path_mle_intensity = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized_intensity.log'
     log_path_mle = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.log'
+    log_path_basis_gammas = './logs/density_matrix_reconstructor_from_basis_gammas_measurements_subset.log'
+    log_path_pinv_gammas = './logs/density_matrix_reconstructor_from_pinv_gammas_measurements_subset_numerics_100.log'
+    
     plot_path = './plots/correlated_measurements_error_mse.png'
 
     metric_to_plot = 'test_loss'
@@ -40,6 +43,8 @@ def main():
     metrics_zeroed_tomography = load_metrics_from_file(log_path_zeroed_tomography)
     metrics_mle_intensity = load_metrics_from_file(log_path_mle_intensity)
     metrics_mle = load_metrics_from_file(log_path_mle)
+    metrics_basis_gammas = load_metrics_from_file(log_path_basis_gammas)
+    metrics_pinv_gammas = load_metrics_from_file(log_path_pinv_gammas)
 
 
     # add metric for all correct measurements in tomography
@@ -66,6 +71,8 @@ def main():
     plt.plot(np.arange(1, 17), zeroed_tomography_fixed_metrics, label='Kwiat basis tomography with zeroed measurements')
     plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, label='Kwiat basis MLE with intensity')
     plt.plot(np.arange(1, 17), mle_fixed_metrics, label='Kwiat basis MLE')
+    plt.plot(np.arange(1, 17), metrics_basis_gammas['test_loss_avg'], label='Tomography with measurement projector gammas')
+    plt.plot(np.arange(1, 17), metrics_pinv_gammas['test_loss_avg'], label='Tomography with pseudoinverse')
 
     plt.xticks(np.arange(1, 17))
     plt.title('MSE for reconstructed density matrix')

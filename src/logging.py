@@ -47,8 +47,22 @@ def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional
 def plot_metrics_from_files(path_common_prefix: str, range_: t.Tuple[int, int], title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', specified_metric: t.Optional[str] = None) -> None:
     plot_metrics_from_common_prefix(path_common_prefix, range_, xaxis, specified_metric)
     plt.title(title)
-    plt.xlabel(xaxis)
+    if xaxis == 'variance':
+        plt.xlabel(r'$\sigma$')
+    else:
+        plt.xlabel(xaxis)
+    if specified_metric is not None:
+        if 'rmse' in specified_metric:
+            plt.ylabel('RMSE')
+        elif 'bce' in specified_metric:
+            plt.ylabel('BCE')
+        elif 'accuracy' in specified_metric:
+            plt.ylabel('Accuracy')
+        else:
+            plt.ylabel(specified_metric)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.axvline(x=0.5, color='black', linestyle='--')
+    plt.xticks(np.arange(0, 1.1, 0.1))
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, bbox_inches='tight')
@@ -62,12 +76,13 @@ def plot_metrics_from_common_prefix(path_common_prefix: str, range_: t.Tuple[int
         metrics = load_metrics_from_file(log_path)
         epochs = metrics.pop(xaxis)
         matrix_dim = int(sqrt(range_[1]))
-        label_i = f'{floor(i / matrix_dim)}_{i % matrix_dim}'
+        index = f'{floor(i / matrix_dim)}{i % matrix_dim}'
+        label_i = '$m_{' + index + '}$'
         # set color according to i and color palette
         cmap = plt.get_cmap('tab20')
         color = cmap(i) 
         if specified_metric is not None:
-            plt.plot(epochs, metrics[specified_metric], label=f'{label_prefix}{specified_metric} {label_i}', color=color, linestyle=linestyle)            
+            plt.plot(epochs, metrics[specified_metric], label=f'{label_prefix}{label_i}', color=color, linestyle=linestyle)            
         else:
             for metric_name, metric_value in metrics.items():
                 plt.plot(epochs, metric_value, label=f'{label_prefix}{metric_name} {label_i}', color=color, linestyle=linestyle)

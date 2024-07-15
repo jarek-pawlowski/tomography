@@ -161,25 +161,58 @@ def test_reconstruction_measurement_noise_for_variance(
     return variance_metrics
 
 
-def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True):
-        num_measurements = measurements.shape[0]
-        num_gammas = gammas.shape[0]
-        B = torch.zeros((num_measurements, num_gammas), dtype=torch.complex64, device=measurements.device)
-        for nu in range(num_measurements):
-            for mu in range(num_gammas):
-                B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True, inverse: str = 'exact'):
+    num_measurements = measurements.shape[0]
+    num_gammas = gammas.shape[0]
+    B = torch.zeros((num_measurements, num_gammas), dtype=torch.complex64, device=measurements.device)
+    for nu in range(num_measurements):
+        for mu in range(num_gammas):
+            B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+    if inverse == 'exact':
         B_inv = torch.linalg.inv(B)
-        # B_inv = torch.linalg.pinv(B)
-        r = torch.matmul(B_inv, measurements.to(torch.complex64))
-        rho = tensordot(gammas, r, indices=([0], [0]))
-        if enforce_valid_density_matrix:
-            # make rho hermitian
-            rho = (rho + torch.conj(rho.T)) / 2
-            # normalize to trace 1
-            if rho.trace() == 0:
-                raise ValueError('Trace of density matrix is zero')
-            rho = rho / rho.trace()
-            # make rho positive semidefinite
-            eigs = torch.amin(torch.linalg.eigvalsh(rho))
-            if eigs < 0.: rho -= torch.eye(rho.shape[-1])*eigs   
-        return rho
+    elif inverse == 'pinv':
+        B_inv = torch.linalg.pinv(B)
+    else:
+        raise ValueError(f'Unknown inverse method: {inverse}')
+    r = torch.matmul(B_inv, measurements.to(torch.complex64))
+    rho = tensordot(gammas, r, indices=([0], [0]))
+    if enforce_valid_density_matrix:
+        # make rho hermitian
+        rho = (rho + torch.conj(rho.T)) / 2
+        # normalize to trace 1
+        if rho.trace() == 0:
+            raise ValueError('Trace of density matrix is zero')
+        rho = rho / rho.trace()
+        # make rho positive semidefinite
+        eigs = torch.amin(torch.linalg.eigvalsh(rho))
+        if eigs < 0.: rho -= torch.eye(rho.shape[-1])*eigs   
+    return rho
+
+
+def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
+    num_projection_vectors = projection_vectors.shape[0]
+    num_gammas = gammas.shape[0]
+    B = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64, device=gammas.device)
+    for nu in range(num_projection_vectors):
+        for mu in range(num_gammas):
+            B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+    return B
+
+
+def reconstruct_with_nn_corrections(
+    measurements: torch.Tensor,
+    projection_vectors: torch.Tensor,
+    gammas: torch.Tensor,
+    inverse_correction: torch.Tensor,
+    r_correction: torch.Tensor
+):
+    ''' 
+    assumes:
+        inverse_correction is a tensor of shape (num_measurements, num_gammas)
+        r_correction is a tensor of shape (num_gammas)
+    '''
+    B = calculate_B(projection_vectors, gammas).to(measurements.device)
+    B_inv = torch.linalg.pinv(B) + inverse_correction.T
+    r = torch.matmul(B_inv, measurements.to(torch.complex64)) + r_correction
+    rho = tensordot(gammas, r, indices=([0], [0]))
+    return rho

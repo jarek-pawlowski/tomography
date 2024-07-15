@@ -13,7 +13,7 @@ from torch.optim import Optimizer
 from torch.distributions.multivariate_normal import MultivariateNormal
 from qiskit.quantum_info import DensityMatrix, state_fidelity
 
-from src.torch_measure import measure, reconstruct
+from src.torch_measure import measure, reconstruct, reconstruct_with_nn_corrections, calculate_B
 from src.utils_measure import Kwiat, Kwiat_projectors, Gammas
 
 def train(
@@ -186,6 +186,84 @@ def train_gammas_reconstructor(
         reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, gammas_i) for measurement_i, gammas_i in zip(measurement, complex_gammas)])
         reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
         loss = criterion(reconstructed_rho, rho)
+        loss.backward()
+        optimizer.step()
+        metrics['train_loss'] += loss.item()
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'loss': loss.item()})
+    metrics['train_loss'] /= len(train_loader)
+    return metrics
+
+
+def train_tomography_corrections_predictor(
+    model: nn.Module,
+    device: torch.device, 
+    train_loader: DataLoader, 
+    optimizer: Optimizer, 
+    epoch: int, 
+    log_interval: int = 100, 
+    criterion: t.Callable = nn.MSELoss(),
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    model_input_info: str = 'full' # 'full', 'measurement' or 'measurement_basis'
+) -> t.Dict[str, t.List[float]]:
+    
+    model.train()
+    model.to(device)
+    metrics = {'train_loss': 0}
+    num_qubits = train_loader.dataset.num_qubits
+
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    n_qubits_basis_matrices = torch.stack([torch.stack(multi_qubit_base) for multi_qubit_base in product(single_qubits_basis_matrices, repeat=num_qubits)])
+    # two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = n_qubits_basis_matrices
+
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+    # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    selected_projection_vectors = n_qubits_projection_vectors
+
+    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+
+
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    for batch_idx, (rho, measurement, _) in pbar:
+        rho, measurement = rho.to(device), measurement.to(device)
+        optimizer.zero_grad()
+        if type(measurements_subset) == int:
+            measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+        if measurements_subset is not None:
+            measurement = measurement[:, measurements_subset]
+            selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
+            selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
+            
+        selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+        basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+        if model_input_info == 'full':
+            measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+        elif model_input_info == 'measurement':
+            measurement_predictor_input = measurement
+        elif model_input_info == 'measurement_basis':
+            measurement_predictor_input = basis_as_vector
+        else:
+            raise ValueError(f'Unknown model_input_info: {model_input_info}')
+        inverse_corrections, r_corrections = model(measurement_predictor_input)
+        complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
+        complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
+        reconstructed_rho = torch.stack([
+            reconstruct_with_nn_corrections(measurement_i, selected_projection_vectors, gammas, inverse_correction_i, r_correction_i)
+            for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+        ])
+        reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+        reconstruction_loss = criterion(reconstructed_rho, rho)
+
+        B = calculate_B(selected_projection_vectors, gammas).to(device)
+        total_corrections = torch.stack([
+            torch.matmul(B, (torch.matmul(inverse_correction_i.T, measurement_i.to(torch.complex64)) + r_correction_i))
+            for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+        ])
+        total_corrections = torch.stack([total_corrections.real, total_corrections.imag], dim=1)
+        corrections_regularization_loss = torch.nn.functional.mse_loss(total_corrections, torch.zeros_like(total_corrections))
+        loss = reconstruction_loss + 0.1*corrections_regularization_loss
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
@@ -428,11 +506,78 @@ def test_gammas_reconstructor(
     return metrics
 
 
+def test_tomography_corrections_predictor(
+    model: nn.Module,
+    device: torch.device, 
+    test_loader: DataLoader, 
+    criterions: t.Dict[str, t.Callable],
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    model_input_info: str = 'full' # 'full', 'measurement' or 'measurement_basis'
+) -> t.Dict[str, t.List[float]]:
+    
+    model.eval()
+    model.to(device)
+    metrics = {name: 0 for name in criterions.keys()}
+
+    num_qubits = test_loader.dataset.num_qubits
+
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
+    n_qubits_basis_matrices = torch.stack([torch.stack(multi_qubit_base) for multi_qubit_base in product(single_qubits_basis_matrices, repeat=num_qubits)])
+    # two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = n_qubits_basis_matrices
+
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+    # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    selected_projection_vectors = n_qubits_projection_vectors
+
+    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+
+
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            if type(measurements_subset) == int:
+                measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+            if measurements_subset is not None:
+                measurement = measurement[:, measurements_subset]
+                selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
+                selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
+                
+            selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
+            basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+            if model_input_info == 'full':
+                measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+            elif model_input_info == 'measurement':
+                measurement_predictor_input = measurement
+            elif model_input_info == 'measurement_basis':
+                measurement_predictor_input = basis_as_vector
+            else:
+                raise ValueError(f'Unknown model_input_info: {model_input_info}')
+            inverse_corrections, r_corrections = model(measurement_predictor_input)
+            complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
+            complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
+            reconstructed_rho = torch.stack([
+                reconstruct_with_nn_corrections(measurement_i, selected_projection_vectors, gammas, inverse_correction_i, r_correction_i)
+                for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+            ])
+            reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(reconstructed_rho, rho).item()
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        print(f'{name}: {metrics[name]:.4f}')
+    return metrics
+
+
 def test_kwiat_gammas_reconstruction(
     device: torch.device, 
     test_loader: DataLoader, 
     criterions: t.Dict[str, t.Callable],
-    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    inverse: str = 'pinv',
+    enforce_valid_density_matrix: bool = False,
 ) -> t.Dict[str, t.List[float]]:
     
     metrics = {name: 0 for name in criterions.keys()}
@@ -442,8 +587,8 @@ def test_kwiat_gammas_reconstruction(
     single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
     two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
     selected_projection_vectors = two_qubits_projection_vectors
-    # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
-    gammas = torch.func.vmap(torch.kron)(two_qubits_basis_matrices[:, 0], two_qubits_basis_matrices[:, 1])
+    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+    # gammas = torch.func.vmap(torch.kron)(two_qubits_basis_matrices[:, 0], two_qubits_basis_matrices[:, 1])
     selected_gammas = gammas
 
     with torch.no_grad():
@@ -458,7 +603,7 @@ def test_kwiat_gammas_reconstruction(
                 selected_gammas = gammas[measurements_subset]
                 
             selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
-            reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, selected_gammas, enforce_valid_density_matrix=True) for measurement_i in measurement])
+            reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, selected_gammas, enforce_valid_density_matrix=enforce_valid_density_matrix, inverse=inverse) for measurement_i in measurement])
             reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
 
             for name, criterion in criterions.items():
