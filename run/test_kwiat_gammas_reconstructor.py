@@ -1,6 +1,7 @@
 import sys
 sys.path.append('./')
 import os
+from itertools import combinations
 
 import random
 import torch
@@ -14,46 +15,58 @@ from src.torch_utils import test_kwiat_gammas_reconstruction, torch_bures_distan
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.utils_measure import Kwiat
 
+
 def list_to_str(l):
     return '_'.join([str(x) for x in l])
 
     
-def calculate_single_run_metrics(test_loader: DataLoader, measurement_subset_len: int, inverse: str, enforce_valid_density_matrix: bool):
-    num_qubits = 2
-    measurement_subset = random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len)
+def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measurement_subset_len: int, inverse: str, enforce_valid_density_matrix: bool, num_qubits: int = 2, previously_used_measurements: list = []):
+    while (measurement_subset := set(random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len))) in previously_used_measurements:
+        pass
+    previously_used_measurements.append(measurement_subset)
 
     criterion = nn.MSELoss()
+    rmse_loss = lambda x, y: torch.sqrt(torch.functional.F.mse_loss(x, y, reduction='mean'))
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
     criterions = {
-        'test_loss': criterion,
+        'test_mse_loss': criterion,
+        'test_rmse_loss': rmse_loss,
         'bures_distance': bures_distance
     }
     device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
 
-    test_metrics = test_kwiat_gammas_reconstruction(device, test_loader, criterions, measurements_subset=measurement_subset, inverse=inverse, enforce_valid_density_matrix=enforce_valid_density_matrix)
-    best_test_loss = test_metrics['test_loss']
+    test_metrics = test_kwiat_gammas_reconstruction(device, test_loader, criterions, measurements_subset=list(measurement_subset), inverse=inverse, enforce_valid_density_matrix=enforce_valid_density_matrix)
+    best_mse_loss = test_metrics['test_mse_loss']
     best_bures_distance = test_metrics['bures_distance']
-    return best_test_loss, best_bures_distance
+    best_rmse_loss = test_metrics['test_rmse_loss']
+    log_path = os.path.join(dir_name, f'reconstruction_from_m{list_to_str(measurement_subset)}.log')
+    log_metrics_to_file(test_metrics, log_path, xaxis=num_measurements, xaxis_name='num_measurements')
+    return best_mse_loss, best_rmse_loss, best_bures_distance
 
 
 if __name__ == '__main__':
-    num_repetitions = 100
+    num_repetitions = 10
     min_num_measurements = 1
-    max_num_measurements = 16
+    max_num_measurements = 4
+    num_qubits = 1
     inverse = 'pinv'
     enforce_valid_density_matrix = False
-    log_path = f'./logs/density_matrix_reconstructor_from_pinv_gammas_measurements_subset_numerics_100.log'
+    dir_name = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas/'
+    log_path = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas.log'
 
     batch_size = 64
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     for num_measurements in range(min_num_measurements, max_num_measurements + 1):
         print(f'Running for {num_measurements} measurements')
         metrics = {
-            'test_loss_avg': 0,
-            'test_loss_min': float('inf'),
-            'test_loss_max': 0,
+            'mse_loss_avg': 0,
+            'mse_loss_min': float('inf'),
+            'mse_loss_max': 0,
+            'rmse_loss_avg': 0,
+            'rmse_loss_min': float('inf'),
+            'rmse_loss_max': 0,
             'bures_distance_avg': 0,
             'bures_distance_min': 1.,
             'bures_distance_max': 0,
@@ -61,12 +74,19 @@ if __name__ == '__main__':
         }
         num_successes = 0
 
+        used_measurements = []
+        num_possible_measurements = len(list(combinations(range(len(Kwiat.basis)**num_qubits), num_measurements)))
         for _ in range(num_repetitions):
+            if len(used_measurements) == num_possible_measurements:
+                break
             try:
-                loss, bures_distance = calculate_single_run_metrics(test_loader, num_measurements, inverse, enforce_valid_density_matrix)
-                metrics['test_loss_avg'] += loss
-                metrics['test_loss_min'] = min(metrics['test_loss_min'], loss)
-                metrics['test_loss_max'] = max(metrics['test_loss_max'], loss)
+                mse_loss, rmse_loss, bures_distance = calculate_single_run_metrics(dir_name, test_loader, num_measurements, inverse, enforce_valid_density_matrix, num_qubits=num_qubits, previously_used_measurements=used_measurements)
+                metrics['mse_loss_avg'] += mse_loss
+                metrics['mse_loss_min'] = min(metrics['mse_loss_min'], mse_loss)
+                metrics['mse_loss_max'] = max(metrics['mse_loss_max'], mse_loss)
+                metrics['rmse_loss_avg'] += rmse_loss
+                metrics['rmse_loss_min'] = min(metrics['rmse_loss_min'], rmse_loss)
+                metrics['rmse_loss_max'] = max(metrics['rmse_loss_max'], rmse_loss)
                 metrics['bures_distance_avg'] += bures_distance
                 metrics['bures_distance_min'] = min(metrics['bures_distance_min'], bures_distance)
                 metrics['bures_distance_max'] = max(metrics['bures_distance_max'], bures_distance)
@@ -74,12 +94,14 @@ if __name__ == '__main__':
             except:
                 pass
 
-        metrics['successes_ratio'] = num_successes / num_repetitions
+        denominator = min(num_repetitions, num_possible_measurements)
+        metrics['successes_ratio'] = num_successes / denominator
         print('Successes ratio:', metrics['successes_ratio'])
         if num_successes > 0:
-            metrics['test_loss_avg'] /= num_successes
+            metrics['mse_loss_avg'] /= num_successes
+            metrics['rmse_loss_avg'] /= num_successes
             metrics['bures_distance_avg'] /= num_successes
 
         write_mode = 'w' if num_measurements == min_num_measurements else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/density_matrix_reconstructor_from_pinv_gammas_measurements_subset_numerics_metrics.png', xaxis='num_measurements')
+    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/1qbit/density_matrix_reconstructor_from_pinv_gammas_metrics.png', xaxis='num_measurements')

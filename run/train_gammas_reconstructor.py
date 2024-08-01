@@ -53,7 +53,7 @@ def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoad
         'test_loss': criterion,
         'bures_distance': bures_distance
     }
-    device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     best_test_loss = float('inf')
     best_bures_distance = 1.
@@ -76,8 +76,8 @@ if __name__ == '__main__':
     num_repetitions = 10
     min_num_measurements = 1
     max_num_measurements = 16
-    model_input_info = 'measurement_basis'
-    log_path = f'./logs/density_matrix_reconstructor_based_on_basis_only_from_gammas_measurements_subset.log'
+    model_input_info = 'full'
+    log_path = f'./logs/density_matrix_reconstructor_from_gammas_measurements_subset-9-16.log'
 
     batch_size = 64
     train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True)
@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     for num_measurements in range(min_num_measurements, max_num_measurements + 1):
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'density_matrix_reconstructor_based_on_basis_only_from_gammas_m{num_measurements}'
+        dir_name = f'density_matrix_reconstructor_from_gammas_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),
@@ -110,4 +110,4 @@ if __name__ == '__main__':
         metrics['bures_distance_avg'] /= num_repetitions
         write_mode = 'w' if num_measurements == min_num_measurements else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/density_matrix_reconstructor_based_on_basis_only_from_gammas_measurements_subset_metrics.png', xaxis='num_measurements')
+    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/density_matrix_reconstructor_from_gammas_metrics.png', xaxis='num_measurements')

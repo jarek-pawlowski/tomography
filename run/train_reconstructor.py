@@ -45,7 +45,7 @@ def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoad
         'test_loss': criterion,
         'bures_distance': bures_distance
     }
-    device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     best_test_loss = float('inf')
     best_bures_distance = 1.

@@ -1,5 +1,6 @@
 import typing as t
 import os
+from itertools import product
 
 import numpy as np
 import torch
@@ -91,8 +92,9 @@ class MeasurementDataset(DensityMatrixDataset):
         rho = self.convert_numpy_matrix_to_tensor(matrix)
 
         # reshape density matrix from (4, 4) to (2, 2, 2, 2) in case of 2 qubits
-        # is it possible to generalize this? e.g. (16, 16) to (2, 2, 2, 2, 2, 2, 2, 2) for 3 qubits?
-        matrix = matrix.reshape((2, 2, 2, 2))
+        # is it possible to generalize this? e.g. (16, 16) to (2, 2, 2, 2, 2, 2, 2, 2) for 4 qubits?
+        # matrix = matrix.reshape((2, 2, 2, 2))
+        matrix = matrix.reshape([2]*2*self.num_qubits)
         measurements = self._get_all_measurements(matrix)
         if self.mask_measurements is not None:
             measurements = np.array([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
@@ -109,7 +111,8 @@ class MeasurementDataset(DensityMatrixDataset):
         return (rho, tensor, label)
     
     def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
-        m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
+        m_all = np.array([self.measurement.measure(rho_in, qubits_ids) for qubits_ids in product(range(4), repeat=self.num_qubits)])
+        # m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
         return m_all
 
 

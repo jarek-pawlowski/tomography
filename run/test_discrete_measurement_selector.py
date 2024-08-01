@@ -23,7 +23,7 @@ def main():
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
 
     # create model
-    model_name = 'discrete_lstm_basis_selector_reduced_kwiat_basis_cross_entropy_loss'
+    model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
     model_save_path = f'./models/{model_name}.pt'
     
     model_params = {
@@ -51,7 +51,7 @@ def main():
         metrics_dict = {metrics_name: test_metrics[metrics_name][f'measurement {i}'] for metrics_name in test_metrics.keys()}
         write_mode = 'w' if i == 0 else 'a'
         log_metrics_to_file(metrics_dict, log_path,  xaxis=i, xaxis_name='num measurements', write_mode=write_mode)
-    plot_metrics_from_file(log_path, title='Metrics for measurement disturbance', save_path=f'./plots/{model_name}_measuremnt_dependence.png', xaxis='num measurements')
+    plot_metrics_from_file(log_path, title='Metrics for measurement disturbance', save_path=f'./plots/{model_name}_measurement_dependence.png', xaxis='num measurements')
 
 
 if __name__ == '__main__':

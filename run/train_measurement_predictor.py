@@ -16,15 +16,15 @@ from src.utils_measure import Kwiat
 
 def main():
     # load data
-    batch_size = 128
-    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    batch_size = 64
+    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=3)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=3)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis_kwiat_basis_loss'
-    model_save_path = f'./models/{model_name}.pt'
+    model_name = 'full_lstm_measure_basis'
+    model_save_path = f'./models/3qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
@@ -33,15 +33,15 @@ def main():
         return bases_loss(predicted_bases, torch.stack(basis_matrices), reduction='mean')
     
     model_params = {
-        'num_qubits': 2,
+        'num_qubits': 3,
         'layers': 6,
-        'hidden_size': 128,
-        'max_num_measurements': 16
+        'hidden_size': 256,
+        'max_num_measurements': 64
     }
     model = LSTMMeasurementPredictor(**model_params)
 
     # train & test model
-    log_path = f'./logs/{model_name}.log'
+    log_path = f'./logs/3qbits/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -53,17 +53,17 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, bases_loss_fn=kwiat_basis_loss_fn)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10) #, bases_loss_fn=kwiat_basis_loss_fn)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
-        if test_metrics['test_loss']['measurement 15'] < best_test_loss:
-            best_test_loss = test_metrics['test_loss']['measurement 15']
+        if test_metrics['test_loss']['measurement 63'] < best_test_loss:
+            best_test_loss = test_metrics['test_loss']['measurement 63']
             model.save(model_save_path)
         # make test_metrics flat
         test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{model_name}_loss.png')
+    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/3qbits/{model_name}_loss.png')
 
 
 if __name__ == '__main__':

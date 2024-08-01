@@ -1,3 +1,5 @@
+from functools import reduce
+from itertools import product
 from math import log2
 import typing as t
 from tqdm import tqdm
@@ -7,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 from qiskit.quantum_info import concurrence, DensityMatrix
 
-from src.utils_measure import Tomography, Kwiat_projectors, Kwiat_library, basis_for_Kwiat_code
+from src.utils_measure import Tomography, Kwiat_projectors, Kwiat_library, basis_for_Kwiat_code, N_QUBIT_GAMMAS
 
 
 def tensordot(
@@ -32,7 +34,7 @@ def trace(a: torch.Tensor):
     indices_to_sum = np.tile(indices, 2)
     return torch.sum(torch.stack([a[tuple(idx)] for idx in indices_to_sum]))
 
-def measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, torch.Tensor]):
+def measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, ...]) -> torch.Tensor:
     # measure all qubits using list of operators
     # basis_vectors = operators to use when measuring subsequent qubits
     
@@ -111,49 +113,58 @@ def test_reconstruction_measurement_noise_for_variance(
     varying_input_idx: t.Optional[t.List[int]],
     variance: float,
     strategy: str = 'tomography',
-    method: str = 'MLE', # param effective for 'optimized_tomography' strategy
-    use_intensity: bool = False # param effective for 'optimized_tomography' strategy
+    method: str = 'MLE',
+    use_intensity: bool = False, # param effective for 'optimized_tomography' strategy
 ) -> t.Dict[str, t.List[float]]:
     
     variance_metrics = {name: 0 for name in criterions.keys()}
 
-    num_qubits = 2 # tested for 2 qubits
-    dim = 2**num_qubits
+    num_qubits = test_loader.dataset.num_qubits
     
-    tomography = Tomography(num_qubits, Kwiat_projectors)
-    tomography.calulate_B_inv(varying_input_idx)
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat_projectors.basis]
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64)
 
     optimized_tomography = Kwiat_library(basis_for_Kwiat_code)
 
     with torch.no_grad():
         for rho, measurements, _ in tqdm(test_loader, desc=f' Variance: {variance}'):
-            data_min = torch.maximum(measurements[:, torch.tensor(varying_input_idx)] - variance, torch.zeros_like(measurements[:, torch.tensor(varying_input_idx)]))
-            data_max = torch.minimum(measurements[:, torch.tensor(varying_input_idx)] + variance, torch.ones_like(measurements[:, torch.tensor(varying_input_idx)]))
-            interval = data_max - data_min + 1e-6
-            varied_data = torch.rand_like(interval) * interval + data_min
-            measurements[:, torch.tensor(varying_input_idx)] = varied_data
+            if varying_input_idx is not None:
+                data_min = torch.maximum(measurements[:, torch.tensor(varying_input_idx)] - variance, torch.zeros_like(measurements[:, torch.tensor(varying_input_idx)]))
+                data_max = torch.minimum(measurements[:, torch.tensor(varying_input_idx)] + variance, torch.ones_like(measurements[:, torch.tensor(varying_input_idx)]))
+                interval = data_max - data_min + 1e-6
+                varied_data = torch.rand_like(interval) * interval + data_min
+                measurements[:, torch.tensor(varying_input_idx)] = varied_data
 
             predictions = []
             for measurement in measurements:
                 if strategy == 'tomography':
-                    rho_rec = tomography.reconstruct(measurement.numpy(), enforce_positiv_sem=True)
+                    if (method == 'zeroed_measurements') and (varying_input_idx is not None):
+                        zero_measurements = varying_input_idx
+                    elif (method == 'random_measurements') or (varying_input_idx is None):
+                        zero_measurements = None
+                    else:
+                        raise ValueError(f'Unknown method for tomography: {method}')
+                    rho_rec = reconstruct(measurement, n_qubits_projection_vectors, gammas, enforce_valid_density_matrix=False, zero_measurements=zero_measurements).cpu().numpy()
                 elif strategy == 'optimized_tomography':
                     intensity = None
                     if use_intensity:
                         intensity = np.ones(len(measurement))
-                        intensity[varying_input_idx] = 1 - variance + 1e-6
+                        if varying_input_idx is not None:
+                            intensity[varying_input_idx] = 1 - variance + 1e-6
                     rho_rec = optimized_tomography.run_tomography(measurement.numpy(), method=method, intensity=intensity)
                 else:
                     raise ValueError(f'Unknown strategy: {strategy}')
-                rho_rec = rho_rec.reshape((dim, dim))
-                rho_rec = rho_rec / np.trace(rho_rec)
                 matrix_r = np.real(rho_rec)
                 matrix_im = np.imag(rho_rec)
                 rho_rec_t = torch.from_numpy(np.stack((matrix_r, matrix_im), axis=0)).float()
                 predictions.append(rho_rec_t)
 
             predictions = torch.stack(predictions)
-            weights = interval.mean(dim=-1) # averaging interval for all disturbed measurements
+            weights = torch.ones(predictions.shape[0]).to(predictions.device)
+            if varying_input_idx is not None:
+                weights = interval.mean(dim=-1) # averaging interval for all disturbed measurements
             for name, criterion in criterions.items():
                 error = torch.flatten(criterion(predictions, rho), start_dim=1, end_dim=-1).mean(dim=-1)
                 variance_metrics[name] += ((error * weights).sum() / weights.sum()).item() / len(test_loader)
@@ -161,15 +172,12 @@ def test_reconstruction_measurement_noise_for_variance(
     return variance_metrics
 
 
-def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True, inverse: str = 'exact'):
-    num_measurements = measurements.shape[0]
-    num_gammas = gammas.shape[0]
-    B = torch.zeros((num_measurements, num_gammas), dtype=torch.complex64, device=measurements.device)
-    for nu in range(num_measurements):
-        for mu in range(num_gammas):
-            B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True, inverse: str = 'exact', zero_measurements: t.Optional[t.List[int]] = None):
+    B = calculate_B(projection_vectors, gammas).to(measurements.device)
     if inverse == 'exact':
         B_inv = torch.linalg.inv(B)
+        if zero_measurements is not None:
+            B_inv[:, zero_measurements] = 0
     elif inverse == 'pinv':
         B_inv = torch.linalg.pinv(B)
     else:

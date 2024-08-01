@@ -14,7 +14,7 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 from qiskit.quantum_info import DensityMatrix, state_fidelity
 
 from src.torch_measure import measure, reconstruct, reconstruct_with_nn_corrections, calculate_B
-from src.utils_measure import Kwiat, Kwiat_projectors, Gammas
+from src.utils_measure import Kwiat, Kwiat_projectors, Gammas, N_QUBIT_GAMMAS
 
 def train(
     model: nn.Module,
@@ -71,7 +71,7 @@ def train_measurement_predictor(
         optimizer.zero_grad()
         basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
         basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
-        measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
+        measurement_with_basis = (measurement[:, 0:1], torch.stack([basis]*model.num_qubits, dim=1))
         predicted_target, predicted_bases = model(measurement_with_basis, rho)
         loss = torch.zeros(1).to(device)
         for i in range(predicted_target.shape[1]):
@@ -222,8 +222,8 @@ def train_tomography_corrections_predictor(
     # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
     selected_projection_vectors = n_qubits_projection_vectors
 
-    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
-
+    # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
     for batch_idx, (rho, measurement, _) in pbar:
@@ -285,7 +285,8 @@ def train_discrete_measurement_selector(
     selector_criterion: t.Callable = nn.CrossEntropyLoss(),
     num_reconstructor_repeats: int = 1,
     num_selector_repeats: int = 1,
-    mode: str = 'rho' # 'rho' or 'concurrence'
+    mode: str = 'rho', # 'rho' or 'concurrence'
+    num_noisy_epochs: int = 10
 ) -> t.Dict[str, t.List[float]]:
     
     model.train()
@@ -326,7 +327,12 @@ def train_discrete_measurement_selector(
                     reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
                 elif mode == 'concurrence':
                     reconstruction_losses = reconstruction_losses.squeeze(-1)
-                mean_reconstruction_losses_with_noise = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
+                
+                if epoch < num_noisy_epochs:
+                    mean_reconstruction_losses_with_noise = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
+                else:
+                    mean_reconstruction_losses_with_noise = reconstruction_losses
+                
                 best_measurement_ids = torch.argmin(mean_reconstruction_losses_with_noise, dim=1).detach() + 1  # shifting by 1 as the first measurement is skipped
                 selector_loss_i = selector_criterion(input=probabilites, target=best_measurement_ids)
                 selector_loss += selector_loss_i
@@ -401,7 +407,7 @@ def test_measurement_predictor(
                 raise ValueError(f'Unknown mode: {mode}')
             basis = torch.from_numpy(Kwiat.basis[0]).to(device).to(torch.complex64)
             basis = basis.unsqueeze(0).expand(rho.shape[0], -1, -1)
-            measurement_with_basis = (measurement[:, 0:1], torch.stack((basis, basis), dim=1))
+            measurement_with_basis = (measurement[:, 0:1], torch.stack([basis]*model.num_qubits, dim=1))
             predicted_target, _ = model(measurement_with_basis, rho)        
             for name, criterion in criterions.items():
                 for i in range(predicted_target.shape[1]):
@@ -531,8 +537,8 @@ def test_tomography_corrections_predictor(
     # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
     selected_projection_vectors = n_qubits_projection_vectors
 
-    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
-
+    # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
 
     with torch.no_grad():
         for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
@@ -580,15 +586,22 @@ def test_kwiat_gammas_reconstruction(
     enforce_valid_density_matrix: bool = False,
 ) -> t.Dict[str, t.List[float]]:
     
+    num_qubits = test_loader.dataset.num_qubits
+
     metrics = {name: 0 for name in criterions.keys()}
     single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
-    two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
-    selected_basis_matrices = two_qubits_basis_matrices
+    n_qubits_basis_matrices = torch.stack([torch.stack(multi_qubit_base) for multi_qubit_base in product(single_qubits_basis_matrices, repeat=num_qubits)])
+    # two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+    selected_basis_matrices = n_qubits_basis_matrices
+
     single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
-    two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
-    selected_projection_vectors = two_qubits_projection_vectors
-    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
+    # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+    selected_projection_vectors = n_qubits_projection_vectors
+
+    # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
     # gammas = torch.func.vmap(torch.kron)(two_qubits_basis_matrices[:, 0], two_qubits_basis_matrices[:, 1])
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
     selected_gammas = gammas
 
     with torch.no_grad():
@@ -598,8 +611,8 @@ def test_kwiat_gammas_reconstruction(
                 measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
             if measurements_subset is not None:
                 measurement = measurement[:, measurements_subset]
-                selected_basis_matrices = two_qubits_basis_matrices[measurements_subset]
-                selected_projection_vectors = two_qubits_projection_vectors[measurements_subset]
+                selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
+                selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
                 selected_gammas = gammas[measurements_subset]
                 
             selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
@@ -894,7 +907,10 @@ def torch_bures_distance(
 
     bures_distances = []
     for rho_in, rho_t in zip(rho_input_np, rho_target_np):
-        fidelity = torch_fidelity(rho_in, rho_t)
+        try:
+            fidelity = torch_fidelity(rho_in, rho_t)
+        except:
+            fidelity = torch.tensor(0.)
         bures_distance = 2 * (1 - torch.sqrt(fidelity))
         bures_distances.append(bures_distance.unsqueeze(0))
     bures_distances = torch.stack(bures_distances)

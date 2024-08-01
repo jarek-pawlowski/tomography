@@ -20,13 +20,16 @@ def log_metrics_to_file(metrics: t.Dict[str, float], log_path: str, write_mode: 
         f.write(f'{prefix}{str.join(DELIMITER, metrics_values_str)}\n')
 
 
-def load_metrics_from_file(log_path: str) -> t.Dict[str, np.ndarray]:
+def load_metrics_from_file(log_path: str, metrics_names: t.Optional[t.List[str]] = None) -> t.Dict[str, np.ndarray]:
+    values_start_row = 0
     with open(log_path, 'r') as f:
         data = f.readlines()
     data = [x.strip().split(DELIMITER) for x in data]
-    metrics_names = data[0]
-    data = np.array([[float(y) for y in x] for x in data[1:]])
-    return {name: data[:, i] for i, name in enumerate(metrics_names)}
+    if metrics_names is None:
+        metrics_names = data[0]
+        values_start_row = 1
+    values = np.array([[float(y) for y in x] for x in data[values_start_row:]])
+    return {name: values[:, i] for i, name in enumerate(metrics_names)}
 
 
 def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', **kwargs: t.Dict[str, t.Any]) -> None:

@@ -18,8 +18,7 @@ def list_to_str(l):
     return '_'.join([str(x) for x in l])
 
     
-def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoader, measurement_subset_len: int, dir_name: str, model_input_info: str):
-    num_qubits = 2
+def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoader, measurement_subset_len: int, dir_name: str, model_input_info: str, num_qubits=2):
     measurement_subset = random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len)
     if model_input_info == 'full':
         input_dim = num_qubits*2*2*2 + 1
@@ -31,7 +30,7 @@ def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoad
     model_params = {
         'input_dim': measurement_subset_len*input_dim,
         'num_measurements': measurement_subset_len,
-        'num_gammas': 16,
+        'num_gammas': 4,
         'layers': 6,
         'hidden_size': 64,
     }
@@ -53,7 +52,7 @@ def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoad
         'test_loss': criterion,
         'bures_distance': bures_distance
     }
-    device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     best_test_loss = float('inf')
     best_bures_distance = 1.
@@ -75,19 +74,19 @@ def calculate_single_run_metrics(train_loader: DataLoader, test_loader: DataLoad
 if __name__ == '__main__':
     num_repetitions = 10
     min_num_measurements = 1
-    max_num_measurements = 16
-    model_input_info = 'measurement_basis'
-    log_path = f'./logs/tomography_corrections_predictor_from_measurement_basis.log'
+    max_num_measurements = 4
+    model_input_info = 'full'
+    log_path = f'./logs/1qbit/tomography_corrections_predictor_subset.log'
 
     batch_size = 64
-    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    train_dataset = MeasurementDataset(root_path='./data/1qbit/train/', return_density_matrix=True, num_qubits=1)
+    test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=1)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     for num_measurements in range(min_num_measurements, max_num_measurements + 1):
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'tomography_corrections_predictor_from_measurement_basis_m{num_measurements}'
+        dir_name = f'1qbit/tomography_corrections_predictor_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),
@@ -98,7 +97,7 @@ if __name__ == '__main__':
         }
 
         for _ in range(num_repetitions):
-            loss, bures_distance = calculate_single_run_metrics(train_loader, test_loader, num_measurements, dir_name, model_input_info)
+            loss, bures_distance = calculate_single_run_metrics(train_loader, test_loader, num_measurements, dir_name, model_input_info, num_qubits=1)
             metrics['test_loss_avg'] += loss
             metrics['test_loss_min'] = min(metrics['test_loss_min'], loss)
             metrics['test_loss_max'] = max(metrics['test_loss_max'], loss)
@@ -109,5 +108,6 @@ if __name__ == '__main__':
         metrics['test_loss_avg'] /= num_repetitions
         metrics['bures_distance_avg'] /= num_repetitions
         write_mode = 'w' if num_measurements == min_num_measurements else 'a'
+        # write_mode = 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/tomography_corrections_predictor_from_measurement_basis_metrics.png', xaxis='num_measurements')
+    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/1qbit/tomography_corrections_predictor_metrics.png', xaxis='num_measurements')

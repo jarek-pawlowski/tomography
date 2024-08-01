@@ -1,3 +1,6 @@
+from itertools import product
+from functools import reduce
+
 import numpy as np
 from numpy.linalg import inv
 
@@ -22,6 +25,7 @@ PauliX = np.array([[0,1],[1,0]])
 PauliY = np.array([[0,-1j],[1j,0]])
 PauliZ = np.array([[1,0],[0,-1]])
 Pauli_vector = [PauliX, PauliY, PauliZ]
+Pauli_matrices = [Pauli0, PauliX, PauliY, PauliZ]
 
 G1 = np.kron(Pauli0,PauliX)/2
 G2 = np.kron(Pauli0,PauliY)/2
@@ -40,7 +44,10 @@ G14 = np.kron(PauliZ,PauliY)/2
 G15 = np.kron(PauliZ,PauliZ)/2
 G16 = np.kron(Pauli0,Pauli0)/2
 
+
 Gammas = np.array([G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G15, G16])
+N_QUBIT_GAMMAS = lambda n: np.array([reduce(np.kron, [pauli_matrix for pauli_matrix in pauli_matrices_i]) for pauli_matrices_i in product(Pauli_matrices, repeat=n)])
+
 
 class Tomography:
     # stuff for tomography (PHYSICAL REVIEW A, VOLUME 64, 052312)

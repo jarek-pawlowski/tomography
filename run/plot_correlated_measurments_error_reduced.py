@@ -1,0 +1,55 @@
+import sys
+sys.path.append('./')
+import os
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+from src.datasets import MeasurementDataset
+from src.model import SequentialMeasurementPredictor, LSTMMeasurementPredictor
+from src.torch_utils import train_measurement_predictor, test_measurement_predictor, torch_bures_distance
+from src.logging import load_metrics_from_file
+
+
+def main():
+    # set paths 
+    global_dir = './logs/1qbit/'
+    log_path_tomography = f'{global_dir}rho_test_varying_random_measurement_clipped_tomography_avg.log'
+    log_path_zeroed_tomography = f'{global_dir}rho_test_varying_zeroed_measurement_clipped_tomography_avg.log'
+    log_path_pinv_gammas = f'{global_dir}density_matrix_reconstructor_from_pinv_gammas.log'
+    log_path_tomography_corrections = f'{global_dir}tomography_corrections_predictor_subset.log'
+    
+    plot_path = './plots/correlated_measurements_1qbit_error_mse_avg.png'
+
+    fixed_metric_name = 'test_mse_loss'
+
+    # load data
+    metrics_tomography = load_metrics_from_file(log_path_tomography)
+    metrics_zeroed_tomography = load_metrics_from_file(log_path_zeroed_tomography)
+    metrics_pinv_gammas = load_metrics_from_file(log_path_pinv_gammas)
+    metrics_tomography_corrections = load_metrics_from_file(log_path_tomography_corrections)
+
+    # add metric for all correct measurements in tomography
+    tomography_fixed_metrics = np.insert(metrics_tomography[fixed_metric_name], 0, 0)
+    tomography_fixed_metrics = np.flip(tomography_fixed_metrics)[1:]
+
+    zeroed_tomography_fixed_metrics = np.insert(metrics_zeroed_tomography[fixed_metric_name], 0, 0)
+    zeroed_tomography_fixed_metrics = np.flip(zeroed_tomography_fixed_metrics)[1:]
+
+    xaxis = np.arange(1, 5)
+    # plot
+    plt.plot(xaxis, tomography_fixed_metrics, label='Kwiat basis tomography\nwith randomized measurements')
+    plt.plot(xaxis, zeroed_tomography_fixed_metrics, label='Kwiat basis tomography\nwith zeroed measurements')
+    plt.plot(xaxis, metrics_pinv_gammas['mse_loss_avg'], label='Tomography with pseudoinverse')
+    plt.plot(xaxis, metrics_tomography_corrections['test_loss_avg'], label='Tomography corrections predictor')
+
+    plt.xticks(np.arange(1, 5))
+    plt.title('Averaged MSE for reconstructed density matrix')
+    plt.xlabel('Number of measurements')
+    plt.ylabel('MSE') 
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.savefig(plot_path, bbox_inches='tight')
+
+if __name__ == '__main__':
+    main()
