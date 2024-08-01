@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
 
-from src.utils_measure import Kwiat
+from src.tomography_utils_numpy import Kwiat
 from src.datasets import DerandomizedTestMeasurementDataset
 from src.model import LSTMDiscreteMeasurementSelector, LSTMMeasurementPredictor, LSTMMeasurementSelector
-from src.torch_utils import reconstruct_rho, collect_kwiat_measurements_basis_probabilities_from_discrete_model, collect_measurements_outputs_from_model
+from src.model_utils import collect_rhos_with_closest_kwiat_bases, collect_kwiat_measurements_basis_probabilities_from_discrete_model, collect_measurements_outputs_from_model
 from src.logging import plot_matrices
 
 batch_size = 128

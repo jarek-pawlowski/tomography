@@ -1,4 +1,6 @@
 import sys
+
+from src.test_heuristics import test_kwiat_gammas_reconstruction
 sys.path.append('./')
 import os
 from itertools import combinations
@@ -11,9 +13,9 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import GammasReconstructor
-from src.torch_utils import test_kwiat_gammas_reconstruction, torch_bures_distance
+from src.criterions import torch_bures_distance
 from src.logging import log_metrics_to_file, plot_metrics_from_file
-from src.utils_measure import Kwiat
+from src.tomography_utils_numpy import Kwiat
 
 
 def list_to_str(l):

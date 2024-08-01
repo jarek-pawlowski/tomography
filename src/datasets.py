@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from src.utils_measure import Measurement, Kwiat
+from src.tomography_utils_numpy import Measurement, Kwiat
 
 
 DICTIONARY_NAME = 'dictionary.txt'

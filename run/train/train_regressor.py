@@ -1,4 +1,6 @@
 import sys
+
+from src.train import train
 sys.path.append('./')
 import os
 
@@ -9,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
 from src.model import Regressor, Classifier
-from src.torch_utils import train, test
+from src.test_model import test
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
 

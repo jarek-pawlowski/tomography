@@ -1,4 +1,6 @@
 import sys
+
+from src.test_model import test_varying_input
 sys.path.append('./')
 
 import torch
@@ -6,8 +8,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.torch_measure import test_concurrence_measurement_noise
-from src.torch_utils import test_varying_input, regressor_accuracy
+from src.test_heuristics import test_concurrence_measurement_noise
+from src.criterions import regressor_accuracy
 from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512

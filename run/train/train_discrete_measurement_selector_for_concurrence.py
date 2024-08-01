@@ -1,4 +1,6 @@
 import sys
+
+from src.train import train_discrete_measurement_selector
 sys.path.append('./')
 import os
 
@@ -9,9 +11,9 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import LSTMDiscreteMeasurementSelectorForConcurrence
-from src.torch_utils import train_discrete_measurement_selector, test_discrete_measurement_selector
+from src.test_model import test_discrete_measurement_selector
 from src.logging import log_metrics_to_file, plot_metrics_from_file
-from src.utils_measure import Kwiat
+from src.tomography_utils_numpy import Kwiat
 
     
 def main():

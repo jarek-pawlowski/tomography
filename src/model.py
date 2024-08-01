@@ -5,7 +5,7 @@ from itertools import product
 import torch
 import torch.nn as nn
 
-from src.torch_measure import measure
+from src.tomography_utils_torch import measure
 
 
 class MLP(nn.Module):

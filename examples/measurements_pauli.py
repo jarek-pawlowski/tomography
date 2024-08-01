@@ -1,7 +1,7 @@
 import numpy as np
 import functools as ft
 
-import src.utils_measure as utils
+import src.tomography_utils_numpy as utils
 
 
 number_qubits = 3

@@ -1,4 +1,7 @@
 import sys
+
+from src.model_utils import calculate_mean_model_output_with_varied_feature
+from src.test_model import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, test_varying_feature
 sys.path.append('./')
 from copy import deepcopy
 import pickle
@@ -11,8 +14,8 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
 from src.model import Regressor, Classifier
-from src.torch_utils import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, calculate_dataset_statistics, test_varying_feature, calculate_mean_model_output_with_varied_feature
-from src.torch_measure import calculate_concurrence_from_measurements
+from src.data_utils import calculate_dataset_statistics
+from src.tomography_utils_torch import calculate_concurrence_from_measurements
 from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512

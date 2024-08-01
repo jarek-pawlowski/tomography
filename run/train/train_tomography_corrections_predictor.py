@@ -1,4 +1,7 @@
 import sys
+
+from src.test_model import test_tomography_corrections_predictor
+from src.train import train_tomography_corrections_predictor
 sys.path.append('./')
 import os
 
@@ -10,9 +13,9 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import TomographyCorrectionsPredictor
-from src.torch_utils import train_tomography_corrections_predictor, test_tomography_corrections_predictor, torch_bures_distance
+from src.criterions import torch_bures_distance
 from src.logging import log_metrics_to_file, plot_metrics_from_file
-from src.utils_measure import Kwiat
+from src.tomography_utils_numpy import Kwiat
 
 def list_to_str(l):
     return '_'.join([str(x) for x in l])

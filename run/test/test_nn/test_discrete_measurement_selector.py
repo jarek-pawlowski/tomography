@@ -1,4 +1,7 @@
 import sys
+
+from src.test_model import test_discrete_measurement_selector
+from src.train import train_measurement_predictor
 sys.path.append('./')
 import os
 
@@ -7,10 +10,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.utils_measure import Kwiat
+from src.tomography_utils_numpy import Kwiat
 from src.datasets import MeasurementDataset
 from src.model import LSTMDiscreteMeasurementSelector
-from src.torch_utils import train_measurement_predictor, test_discrete_measurement_selector, torch_bures_distance
+from src.criterions import torch_bures_distance
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
 

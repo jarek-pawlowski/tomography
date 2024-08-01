@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-import src.utils_measure as utils
+import src.tomography_utils_numpy as utils
 
 val_set = "../matrices"
 

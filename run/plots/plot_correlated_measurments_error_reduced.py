@@ -1,4 +1,7 @@
 import sys
+
+from src.test_model import test_measurement_predictor
+from src.train import train_measurement_predictor
 sys.path.append('./')
 import os
 
@@ -8,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from src.datasets import MeasurementDataset
 from src.model import SequentialMeasurementPredictor, LSTMMeasurementPredictor
-from src.torch_utils import train_measurement_predictor, test_measurement_predictor, torch_bures_distance
+from src.criterions import torch_bures_distance
 from src.logging import load_metrics_from_file
 
 
