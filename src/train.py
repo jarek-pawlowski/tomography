@@ -1,13 +1,13 @@
 from functools import reduce
 from itertools import product
+import random
+import typing as t
+
 import torch
 import torch.nn as nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-
-import typing as t
 
 from src.tomography_utils_torch import calculate_B, reconstruct, reconstruct_with_nn_corrections
 from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat, Kwiat_projectors
