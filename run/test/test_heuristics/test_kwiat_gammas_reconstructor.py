@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.model import GammasReconstructor
-from src.criterions import torch_bures_distance
+from src.criterions import torch_bures_distance, complex_distance_matrix_elements_avg
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 
@@ -33,16 +33,27 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
     criterions = {
         'test_mse_loss': criterion,
         'test_rmse_loss': rmse_loss,
-        'bures_distance': bures_distance
+        'bures_distance': bures_distance,
+        'avg_complex_distance': complex_distance_matrix_elements_avg
     }
-    device = torch.device('cpu' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     test_metrics = test_kwiat_gammas_reconstruction(device, test_loader, criterions, measurements_subset=list(measurement_subset), inverse=inverse, enforce_valid_density_matrix=enforce_valid_density_matrix)
+    matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
+    test_metrics = {k: v.item() for k, v in test_metrics.items()}
     best_mse_loss = test_metrics['test_mse_loss']
     best_bures_distance = test_metrics['bures_distance']
     best_rmse_loss = test_metrics['test_rmse_loss']
     log_path = os.path.join(dir_name, f'reconstruction_from_m{list_to_str(measurement_subset)}.log')
     log_metrics_to_file(test_metrics, log_path, xaxis=num_measurements, xaxis_name='num_measurements')
+    matrix_elements_log_path = os.path.join(dir_name, f'complex_distance_reconstruction_from_m{list_to_str(measurement_subset)}.log')
+    matrix_metrics_dict = {
+        '00': matrix_elements_complex_distance[0, 0].item(),
+        '01': matrix_elements_complex_distance[0, 1].item(),
+        '10': matrix_elements_complex_distance[1, 0].item(),
+        '11': matrix_elements_complex_distance[1, 1].item()
+    }
+    log_metrics_to_file(matrix_metrics_dict, matrix_elements_log_path, xaxis=num_measurements, xaxis_name='num_measurements')
     return best_mse_loss, best_rmse_loss, best_bures_distance
 
 
@@ -53,8 +64,8 @@ if __name__ == '__main__':
     num_qubits = 1
     inverse = 'pinv'
     enforce_valid_density_matrix = False
-    dir_name = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas/'
-    log_path = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas.log'
+    dir_name = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_v2/'
+    log_path = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_v2.log'
 
     batch_size = 64
     test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=num_qubits)
@@ -93,8 +104,8 @@ if __name__ == '__main__':
                 metrics['bures_distance_min'] = min(metrics['bures_distance_min'], bures_distance)
                 metrics['bures_distance_max'] = max(metrics['bures_distance_max'], bures_distance)
                 num_successes += 1
-            except:
-                pass
+            except Exception as e:
+                raise(e)
 
         denominator = min(num_repetitions, num_possible_measurements)
         metrics['successes_ratio'] = num_successes / denominator

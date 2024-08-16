@@ -308,7 +308,6 @@ class LSTMMeasurementSelector(nn.Module):
         self.num_qubits = num_qubits
         self.basis_dim = 2 * (num_qubits*4)
         self.bases = possible_basis_matrices
-        self.dens_matrix_dim = 2 * (4 ** num_qubits)
         # self.measurement_predictor = MLP(layers, 1 + self.basis_dim, hidden_size, self.basis_sufficient_params)
         self.measurement_selector = nn.LSTMCell(1 + self.basis_dim, hidden_size)
         self.projectors = nn.ModuleList([nn.Sequential(
@@ -379,7 +378,6 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
         self.basis_dim = 2 * (num_qubits*4)
         self.bases = torch.stack(possible_basis_matrices, dim=0)
         self.multiqubit_bases_ids = list(product(range(len(self.bases)), repeat=self.num_qubits))
-        self.dens_matrix_dim = 2 * (4 ** num_qubits)
         self.measurement_selector = nn.LSTMCell(1 + self.basis_dim, hidden_size)
         self.projectors = nn.ModuleList([nn.Sequential(
             nn.Linear(hidden_size, len(self.bases)),
@@ -509,6 +507,13 @@ class LSTMDiscreteMeasurementSelectorForConcurrence(LSTMDiscreteMeasurementSelec
         self.matrix_reconstructor = LSTMConcurrencePredictor(1 + self.basis_dim, num_qubits, layers, hidden_size, bias=True)
 
 
+class TomographyCorrectionsLSTMDiscreteMeasurementSelector(LSTMDiscreteMeasurementSelector):
+    def __init__(self, num_qubits: int , possible_basis_matrices: t.List[torch.Tensor], layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(TomographyCorrectionsLSTMDiscreteMeasurementSelector, self).__init__(num_qubits, possible_basis_matrices, layers, hidden_size, max_num_measurements)
+        self.num_gammas = 4 ** num_qubits
+        self.matrix_reconstructor = LSTMTomographyCorrectionsPredictor(1 + self.basis_dim, self.num_gammas,  layers, hidden_size)
+
+
 class DensityMatrixReconstructor(nn.Module):
     def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16):
         super(DensityMatrixReconstructor, self).__init__()
@@ -556,6 +561,29 @@ class TomographyCorrectionsPredictor(nn.Module):
         r_corrections = corrections[..., 2*self.num_measurements*self.num_gammas:]
         r_corrections = r_corrections.view(*r_corrections.shape[:-1], 2, self.num_gammas)
         return inverse_corrections, r_corrections
+    
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
+
+class LSTMTomographyCorrectionsPredictor(nn.Module):
+    def __init__(self, input_dim: int, num_gammas: int = 1, layers: int = 2, hidden_size: int = 16):
+        super(LSTMTomographyCorrectionsPredictor, self).__init__()
+        self.num_gammas = num_gammas
+        self.lstm = nn.LSTM(input_dim, hidden_size, layers, batch_first=True)
+        self.projector = nn.Linear(hidden_size, 2 * num_gammas * (1 + 1))
+
+    def forward(self, measurement_with_basis: torch.Tensor): # maybe gamma should be also added as input?
+        hidden_info, _ = self.lstm(measurement_with_basis)
+        corrections = self.projector(hidden_info)
+        inverse_corrections = corrections[..., :2*self.num_gammas]
+        inverse_corrections = inverse_corrections.view(*inverse_corrections.shape[:-1], 2, 1, self.num_gammas)
+        r_corrections = corrections[..., 2*self.num_gammas:]
+        r_corrections = r_corrections.view(*r_corrections.shape[:-1], 2, 1, self.num_gammas)
+        return torch.cat((inverse_corrections, r_corrections), dim=-2)
     
     def save(self, path: str):
         torch.save(self.state_dict(), path)

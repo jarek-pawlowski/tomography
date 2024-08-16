@@ -88,14 +88,30 @@ def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, ga
 
 
 def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
-    num_projection_vectors = projection_vectors.shape[0]
-    num_gammas = gammas.shape[0]
-    B = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64, device=gammas.device)
-    for nu in range(num_projection_vectors):
-        for mu in range(num_gammas):
-            B[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
-    return B
+    # num_projection_vectors = projection_vectors.shape[0]
+    # num_gammas = gammas.shape[0]
+    # B_old = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64) #, device=gammas.device)
+    # for nu in range(num_projection_vectors):
+    #     for mu in range(num_gammas):
+    #         B_old[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
+    # # return B
 
+    # num_projection_vectors = projection_vectors.shape[0]
+    # num_gammas = gammas.shape[0]
+    # B_old2 = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64) #, device=gammas.device)
+    # for nu in range(num_projection_vectors):
+    #     for mu in range(num_gammas):
+    #         B_old2[nu,mu] = torch.matmul(projection_vectors[nu].conj().T, torch.matmul(gammas[mu], projection_vectors[nu])).item()
+
+
+    # Compute conjugate of projection_vectors
+    projection_vectors_conj = torch.conj(projection_vectors)
+    
+    # Use einsum for batch tensor operations
+    intermediate_result = torch.einsum('ijk,nkm->injm', gammas, projection_vectors)
+    B = torch.einsum('njm,injm->ni', projection_vectors_conj, intermediate_result)
+
+    return B
 
 def reconstruct_with_nn_corrections(
     measurements: torch.Tensor,
@@ -109,8 +125,29 @@ def reconstruct_with_nn_corrections(
         inverse_correction is a tensor of shape (num_measurements, num_gammas)
         r_correction is a tensor of shape (num_gammas)
     '''
-    B = calculate_B(projection_vectors, gammas).to(measurements.device)
-    B_inv = torch.linalg.pinv(B) + inverse_correction.T
+    with torch.no_grad():
+        B = calculate_B(projection_vectors, gammas)
+        B_inv = torch.linalg.pinv(B)
+
+    B_inv = B_inv.detach().to(inverse_correction.device) + inverse_correction.T
     r = torch.matmul(B_inv, measurements.to(torch.complex64)) + r_correction
+    rho = tensordot(gammas, r, indices=([0], [0]))
+    return rho
+
+
+def reconstruct_with_nn_corrections_and_B_inv(
+    measurements: torch.Tensor,
+    B_inv: torch.Tensor,
+    gammas: torch.Tensor,
+    inverse_correction: torch.Tensor,
+    r_correction: torch.Tensor
+):
+    ''' 
+    assumes:
+        inverse_correction is a tensor of shape (num_measurements, num_gammas)
+        r_correction is a tensor of shape (num_gammas)
+    '''
+    B_inv_corr = B_inv + inverse_correction.T
+    r = torch.matmul(B_inv_corr, measurements.to(torch.complex64)) + r_correction
     rho = tensordot(gammas, r, indices=([0], [0]))
     return rho

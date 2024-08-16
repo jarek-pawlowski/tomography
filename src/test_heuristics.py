@@ -57,10 +57,13 @@ def test_kwiat_gammas_reconstruction(
             reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
 
             for name, criterion in criterions.items():
-                metrics[name] += criterion(reconstructed_rho, rho).item()
+                metrics[name] += criterion(reconstructed_rho, rho)
     for name in metrics.keys():
         metrics[name] /= len(test_loader)
-        print(f'{name}: {metrics[name]:.4f}')
+        try:
+            print(f'{name}: {metrics[name]:.4f}')
+        except:
+            pass
     return metrics
 
 

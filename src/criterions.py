@@ -85,3 +85,26 @@ def bases_loss(
     if reduction == 'mean':
         return bases_loss.mean()
     return bases_loss
+
+
+def complex_distance(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    reduction: str = 'mean',
+    complex_dim: int = -3
+) -> torch.Tensor:
+    distances = (input - target).norm(dim=complex_dim)
+    if reduction == 'mean':
+        return distances.mean()
+    return distances
+
+
+def complex_distance_matrix_elements_avg(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    complex_dim: int = -3
+) -> torch.Tensor:
+    distances = complex_distance(input, target, reduction='none', complex_dim=complex_dim)
+    distances = distances.view(-1, distances.shape[-2], distances.shape[-1])
+    distances = distances.mean(dim=0)
+    return distances

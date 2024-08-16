@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from src.tomography_utils_torch import reconstruct, reconstruct_with_nn_corrections
 from src.data_utils import generate_sample_from_mean_and_covariance
 from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat, Kwiat_projectors
+from src.train import reconstruct_rho_from_corrections_dynamic_selection
 
 
 def test(
@@ -251,6 +252,10 @@ def test_discrete_measurement_selector(
     qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
     qubits_bases = torch.stack(qubits_bases)
 
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=model.num_qubits)])
+    gammas = torch.tensor(N_QUBIT_GAMMAS(model.num_qubits), dtype=torch.complex64, device=device)
+
     metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
     with torch.no_grad():
         for rho, measurement, concurrence in tqdm(test_loader, desc='Testing model...'):
@@ -260,17 +265,29 @@ def test_discrete_measurement_selector(
                 (measurement[:, i:i+1], qubits_bases_batch[:, i])
                 for i in range(measurement.shape[1])
             ]
-            if mode == 'rho':
+            if mode == 'rho' or mode == 'tomo_corrections':
                 target = rho.to(device)
             elif mode == 'concurrence':
                 target = concurrence.to(device)
             else:
                 raise ValueError(f'Unknown mode: {mode}')
 
-            predicted_best_targets, _, _ = model(measurement_with_basis, rho)
+            predicted_best_targets, predicted_bases_probabilities, _ = model(measurement_with_basis, rho)
             for name, criterion in criterions.items():
                 for i in range(predicted_best_targets.shape[1]):
-                    metrics[name][f'measurement {i}'] += criterion(predicted_best_targets[:, i], target).item()
+                    if mode == 'tomo_corrections':
+                        probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[:, i, j] for j in range(predicted_bases_probabilities.shape[2])])
+                        selected_projection_vectors_ids = torch.argsort(probabilites, dim=1, descending=True)[:, :i+1]
+                        selected_projection_vectors = n_qubits_projection_vectors[selected_projection_vectors_ids]
+                        selected_measurements = torch.stack([m[selected_projection_vectors_ids[i]] for i, m in enumerate(measurement)])
+                        inverse_corrections, r_corrections = predicted_best_targets[:, :i+1, :, 0], predicted_best_targets[:, i, :, 1]
+                        inverse_corrections = torch.moveaxis(inverse_corrections, 1, -2)                        
+                        complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
+                        complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
+                        reconstructed_rho = reconstruct_rho_from_corrections_dynamic_selection(selected_projection_vectors, gammas, selected_measurements, complex_inverse_corrections, complex_r_corrections)
+                        metrics[name][f'measurement {i}'] += criterion(reconstructed_rho, target).item()
+                    else:
+                        metrics[name][f'measurement {i}'] += criterion(predicted_best_targets[:, i], target).item()
     for name in metrics.keys():
         for i in range(max_num_measurements):
             metrics[name][f'measurement {i}'] /= len(test_loader)
