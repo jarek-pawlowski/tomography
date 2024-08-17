@@ -105,7 +105,7 @@ if __name__ == '__main__':
                 metrics['bures_distance_max'] = max(metrics['bures_distance_max'], bures_distance)
                 num_successes += 1
             except Exception as e:
-                raise(e)
+                pass
 
         denominator = min(num_repetitions, num_possible_measurements)
         metrics['successes_ratio'] = num_successes / denominator

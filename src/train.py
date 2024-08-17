@@ -244,7 +244,7 @@ def train_tomography_corrections_predictor(
         else:
             raise ValueError(f'Unknown model_input_info: {model_input_info}')
         inverse_corrections, r_corrections = model(measurement_predictor_input)
-        loss = corrections_loss(device, criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections)
+        loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections)
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()

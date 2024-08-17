@@ -4,6 +4,7 @@ from math import floor, sqrt
 
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import numpy as np
 
 DELIMITER = ', '
@@ -210,6 +211,80 @@ def plot_error_map(
         plt.close()
 
 
+def plot_grouped_error_map(
+    metrics_values: np.ndarray,
+    figsize: t.Tuple[int, int] = (10, 12),
+    save_path: t.Optional[str] = None,
+    values_range: t.Optional[t.Tuple[float, float]] = None,
+    title: str = '',
+    close: bool = True
+):
+    outer_dim, inner_dim = metrics_values.shape
+    outer_dim_sqrt = int(sqrt(outer_dim))
+    inner_dim_sqrt = int(sqrt(inner_dim))
+    fig = plt.figure(figsize=figsize)
+    outer = gridspec.GridSpec(outer_dim_sqrt, outer_dim_sqrt, wspace=0.2, hspace=0.2)
+
+    cmap = plt.get_cmap('YlGnBu')
+    if values_range is not None:
+        norm = plt.Normalize(vmin=values_range[0], vmax=values_range[1])
+    else:
+        norm = plt.Normalize()
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    for i in range(outer_dim):
+        inner = gridspec.GridSpecFromSubplotSpec(inner_dim_sqrt, inner_dim_sqrt,
+                        subplot_spec=outer[i], wspace=0., hspace=0.01)
+
+        # set xticks and yticks for the outer plot
+        outer_ax = plt.subplot(outer[i])
+        outer_ax.set_xticks([0.5])
+        outer_ax.set_xticklabels([i % outer_dim_sqrt + 1])
+        outer_ax.set_yticks([0.5])
+        outer_ax.set_yticklabels([floor(i / outer_dim_sqrt)])
+        outer_ax.grid(False)
+        outer_ax.label_outer()
+        # fig.add_subplot(outer_ax)
+        plt.box(False)
+        
+        for j in range(inner_dim):
+            metric_value = metrics_values[i, j]
+            if not np.isnan(metric_value):
+                color = cmap(norm(metric_value))
+                ax = plt.subplot(inner[j])
+                ax.text(0, 0, f'{metric_value:.4f}', ha='center', va='center', fontsize=8)
+                ax.imshow([[color]])
+                ax.grid(False)
+                if i== 0 and j == 0:
+                    ax.set_yticks([0.5])
+                    ax.set_yticklabels([floor(i / outer_dim_sqrt)])
+                    ax.xaxis.set_visible(False)
+                elif i == 8 and j == 2:
+                    ax.set_xticks([0.5])
+                    ax.set_xticklabels([i % outer_dim_sqrt + 1])
+                    ax.yaxis.set_visible(False)
+                else:
+                    ax.xaxis.set_visible(False)
+                    ax.yaxis.set_visible(False)
+                ax.label_outer()
+                fig.add_subplot(ax)
+
+    fig.subplots_adjust(wspace=0., hspace=0., top=0.93, bottom=0.28) #right=0.97)
+    fig.supxlabel('m', y = 0.23, fontsize=15)
+    fig.supylabel('m', x = 0.06, fontsize=15)
+
+    cbar_ax = fig.add_axes([0.15, 0.15, 0.7, 0.05])
+    fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
+    cbar_ax.set_xlabel('Complex distance')
+    plt.suptitle(title, fontsize=20)
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.show()
+    if close:
+        plt.close()
+
+
 def plot_error_map_seaborn(
     metrics_values: np.ndarray,
     save_path: t.Optional[str] = None,
@@ -221,7 +296,7 @@ def plot_error_map_seaborn(
         norm = plt.Normalize(vmin=values_range[0], vmax=values_range[1])
         metrics_values = norm(metrics_values)
     plt.figure(figsize=(15,12))
-    sns.set(font_scale=1.7)
+    sns.set_theme(font_scale=1.7)
     sns.heatmap(
         metrics_values.reshape((4,4)),
         annot=True, fmt=".4f", linewidth=6.0

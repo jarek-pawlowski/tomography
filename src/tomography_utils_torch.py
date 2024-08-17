@@ -94,15 +94,7 @@ def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
     # for nu in range(num_projection_vectors):
     #     for mu in range(num_gammas):
     #         B_old[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
-    # # return B
-
-    # num_projection_vectors = projection_vectors.shape[0]
-    # num_gammas = gammas.shape[0]
-    # B_old2 = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64) #, device=gammas.device)
-    # for nu in range(num_projection_vectors):
-    #     for mu in range(num_gammas):
-    #         B_old2[nu,mu] = torch.matmul(projection_vectors[nu].conj().T, torch.matmul(gammas[mu], projection_vectors[nu])).item()
-
+    # # return B_old
 
     # Compute conjugate of projection_vectors
     projection_vectors_conj = torch.conj(projection_vectors)
@@ -110,7 +102,6 @@ def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
     # Use einsum for batch tensor operations
     intermediate_result = torch.einsum('ijk,nkm->injm', gammas, projection_vectors)
     B = torch.einsum('njm,injm->ni', projection_vectors_conj, intermediate_result)
-
     return B
 
 def reconstruct_with_nn_corrections(
