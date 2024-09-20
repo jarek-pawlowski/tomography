@@ -50,7 +50,8 @@ def train_measurement_predictor(
     log_interval: int = 100,
     criterion: t.Callable = nn.MSELoss(),
     bases_loss_fn: t.Optional[t.Callable] = None,
-    mode: str = 'rho' # 'rho' or 'concurrence'
+    mode: str = 'rho', # 'rho' or 'concurrence'
+    increase_loss_weights_with_measurement: bool = False
 ) -> t.Dict[str, t.List[float]]:
 
     model.train()
@@ -72,11 +73,14 @@ def train_measurement_predictor(
         predicted_target, predicted_bases = model(measurement_with_basis, rho)
         loss = torch.zeros(1).to(device)
         for i in range(predicted_target.shape[1]):
+            loss_weight_i = 1
+            if increase_loss_weights_with_measurement:
+                    loss_weight_i = (i + 1) # / (predicted_target.shape[1] * (predicted_target.shape[1] + 1) / 2)
             if epoch < 10 and mode == 'concurrence':
                 predicted_target_with_noise = predicted_target[:, i] + torch.randn_like(predicted_target[:, i]) * 1e-3
-                loss += criterion(predicted_target_with_noise, target)
+                loss += criterion(predicted_target_with_noise, target) * loss_weight_i
             else:
-                loss += criterion(predicted_target[:, i], target)
+                loss += criterion(predicted_target[:, i], target) * loss_weight_i
         if bases_loss_fn is not None:
             bases_loss = bases_loss_fn(predicted_bases)
             metrics['bases_loss'] += bases_loss.item()

@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor
+from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorBasedOnReconstructedMatrix
 from src.criterions import bases_loss
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
@@ -19,15 +19,16 @@ from src.tomography_utils_numpy import Kwiat
 
 def main():
     # load data
+    num_qubits = 3
     batch_size = 64
-    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=3)
-    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=3)
+    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis'
-    model_save_path = f'./models/3qbits/{model_name}.pt'
+    model_name = 'full_lstm_measure_basis_rho_input_hs256_detach'
+    model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
@@ -36,15 +37,15 @@ def main():
         return bases_loss(predicted_bases, torch.stack(basis_matrices), reduction='mean')
     
     model_params = {
-        'num_qubits': 3,
+        'num_qubits': num_qubits,
         'layers': 6,
         'hidden_size': 256,
-        'max_num_measurements': 64
+        'max_num_measurements': 4**num_qubits,
     }
-    model = LSTMMeasurementPredictor(**model_params)
+    model = LSTMMeasurementPredictorBasedOnReconstructedMatrix(**model_params)
 
     # train & test model
-    log_path = f'./logs/3qbits/{model_name}.log'
+    log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     num_epochs = 40
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -55,18 +56,19 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     best_test_loss = float('inf')
+    last_measurement_idx = 4**num_qubits - 1
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10) #, bases_loss_fn=kwiat_basis_loss_fn)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, increase_loss_weights_with_measurement=False) #, bases_loss_fn=kwiat_basis_loss_fn)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
-        if test_metrics['test_loss']['measurement 63'] < best_test_loss:
-            best_test_loss = test_metrics['test_loss']['measurement 63']
+        if test_metrics['test_loss'][f'measurement {last_measurement_idx}'] < best_test_loss:
+            best_test_loss = test_metrics['test_loss'][f'measurement {last_measurement_idx}']
             model.save(model_save_path)
         # make test_metrics flat
         test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/3qbits/{model_name}_loss.png')
+    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
 
 
 if __name__ == '__main__':

@@ -20,17 +20,24 @@ def main():
     global_dir = './logs/1qbit/'
     log_path_tomography = f'{global_dir}rho_test_varying_random_measurement_clipped_tomography_avg.log'
     log_path_zeroed_tomography = f'{global_dir}rho_test_varying_zeroed_measurement_clipped_tomography_avg.log'
-    log_path_pinv_gammas = f'{global_dir}density_matrix_reconstructor_from_pinv_gammas.log'
+    log_path_pinv_gammas = f'{global_dir}density_matrix_reconstructor_from_pinv_gammas_v2.log'
+    log_path_hlp = f'{global_dir}density_matrix_reconstructor_from_hlp.log'
     log_path_tomography_corrections = f'{global_dir}tomography_corrections_predictor_subset.log'
     
     plot_path = './plots/correlated_measurements_1qbit_error_mse_avg.png'
 
+    # fixed_metric_name = 'bures_distance' 
     fixed_metric_name = 'test_mse_loss'
+    # metrics_name =  'bures_distance_avg' 
+    metrics_name = 'mse_loss_avg'
+    # corrections_metrics_name = 'bures_distance_avg' 
+    corrections_metrics_name = 'test_loss_avg'
 
     # load data
     metrics_tomography = load_metrics_from_file(log_path_tomography)
     metrics_zeroed_tomography = load_metrics_from_file(log_path_zeroed_tomography)
     metrics_pinv_gammas = load_metrics_from_file(log_path_pinv_gammas)
+    metrics_hlp = load_metrics_from_file(log_path_hlp)
     metrics_tomography_corrections = load_metrics_from_file(log_path_tomography_corrections)
 
     # add metric for all correct measurements in tomography
@@ -44,11 +51,12 @@ def main():
     # plot
     plt.plot(xaxis, tomography_fixed_metrics, label='Kwiat basis tomography\nwith randomized measurements')
     plt.plot(xaxis, zeroed_tomography_fixed_metrics, label='Kwiat basis tomography\nwith zeroed measurements')
-    plt.plot(xaxis, metrics_pinv_gammas['mse_loss_avg'], label='Tomography with pseudoinverse')
-    plt.plot(xaxis, metrics_tomography_corrections['test_loss_avg'], label='Tomography corrections predictor')
+    plt.plot(xaxis, metrics_pinv_gammas[metrics_name], label='Tomography with pseudoinverse')
+    plt.plot(xaxis, metrics_hlp[metrics_name], label='HLP reconstruction')
+    plt.plot(xaxis, metrics_tomography_corrections[corrections_metrics_name], label='Tomography corrections predictor')
 
     plt.xticks(np.arange(1, 5))
-    plt.title('Averaged MSE for reconstructed density matrix')
+    plt.title('MSE for reconstructed density matrix')
     plt.xlabel('Number of measurements')
     plt.ylabel('MSE') 
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)

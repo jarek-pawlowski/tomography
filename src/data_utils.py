@@ -30,6 +30,29 @@ def calculate_dataset_statistics(
     return statistics
 
 
+def calculate_dataset_histogram(
+    data_loader: DataLoader,
+    device: torch.device,
+    bins: torch.Tensor = torch.tensor([-0.1, 1.e-2, 1.1])
+):
+    population = []
+    for _, label in tqdm(data_loader, 'Collecting data histogram...'):
+        label = label.to(device)
+        population.append(label)
+    population = torch.cat(population, dim=0)
+    return torch.histogram(population, bins)[0]
+
+
 def generate_sample_from_mean_and_covariance(mean: torch.Tensor, covariance_matrix: torch.Tensor, batch_size: int = 1):
     mvn = MultivariateNormal(mean, covariance_matrix)
     return mvn.sample((batch_size,))
+
+
+def generate_mean_sample(
+    data_loader: DataLoader,
+    device: torch.device,
+):
+    samples = [data_tuple[0].to(device) for data_tuple in tqdm(data_loader, 'Collecting data statistics...')]
+    samples = torch.cat(samples, dim=0)
+    mean_sample = torch.mean(samples, dim=0)
+    return mean_sample

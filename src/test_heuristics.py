@@ -1,17 +1,77 @@
-import numpy as np
-from src.tomography_utils_torch import calculate_concurrence_from_measurements, reconstruct
-from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat, Kwiat_library, Kwiat_projectors, basis_for_Kwiat_code
-
-
-import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-
-
 import random
 import typing as t
 from functools import reduce
 from itertools import product
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from src.data_utils import generate_mean_sample
+from src.tomography_utils_torch import calculate_concurrence_from_measurements, reconstruct
+from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat_library, Kwiat_projectors, basis_for_Kwiat_code
+from src.hlp import reconstruct_1qbit_hlp
+
+
+def test_1qbit_hlp(
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    device: torch.device  = torch.device('cpu'),
+) -> t.Dict[str, t.List[float]]:
+    num_qubits = test_loader.dataset.num_qubits
+    assert num_qubits == 1, 'HLP defined only for 1 qubit'
+
+    metrics = {name: 0 for name in criterions.keys()}
+
+    with torch.no_grad():
+        for rho, measurements, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurements = rho.to(device), measurements.to(device)
+            if type(measurements_subset) == int:
+                measurements_subset = random.sample(range(measurements.shape[1]), measurements_subset)
+            if measurements_subset is not None:
+                measurements = measurements[:, measurements_subset]
+            else:
+                measurements_subset = list(range(measurements.shape[1]))
+
+            reconstructed_rho = reconstruct_1qbit_hlp(measurements, measurements_subset)
+            reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
+
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(reconstructed_rho, rho)
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        try:
+            print(f'{name}: {metrics[name]:.4f}')
+            metrics[name] = metrics[name].item()
+        except:
+            pass
+    return metrics
+
+
+def test_mean_reconstruction(
+    mean_rho: torch.Tensor,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    device: torch.device = torch.device('cpu'),
+) -> t.Dict[str, t.List[float]]:
+    
+    metrics = {name: 0 for name in criterions.keys()}
+    with torch.no_grad():
+        for rho, _, _ in tqdm(test_loader, desc='Testing model...'):
+            rho = rho.to(device)
+            for name, criterion in criterions.items():
+                metrics[name] += criterion(mean_rho.unsqueeze(0).expand_as(rho), rho)
+    for name in metrics.keys():
+        metrics[name] /= len(test_loader)
+        try:
+            print(f'{name}: {metrics[name]:.4f}')
+            metrics[name] = metrics[name].item()
+        except:
+            pass
+    return metrics
+        
 
 
 def test_kwiat_gammas_reconstruction(
@@ -26,10 +86,6 @@ def test_kwiat_gammas_reconstruction(
     num_qubits = test_loader.dataset.num_qubits
 
     metrics = {name: 0 for name in criterions.keys()}
-    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat.basis]
-    n_qubits_basis_matrices = torch.stack([torch.stack(multi_qubit_base) for multi_qubit_base in product(single_qubits_basis_matrices, repeat=num_qubits)])
-    # two_qubits_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
-    selected_basis_matrices = n_qubits_basis_matrices
 
     single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=device) for basis in Kwiat_projectors.basis]
     # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
@@ -48,11 +104,10 @@ def test_kwiat_gammas_reconstruction(
                 measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
             if measurements_subset is not None:
                 measurement = measurement[:, measurements_subset]
-                selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
                 selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
-                selected_gammas = gammas[measurements_subset]
+                if inverse != 'pinv':
+                    selected_gammas = gammas[measurements_subset]
 
-            selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
             reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, selected_gammas, enforce_valid_density_matrix=enforce_valid_density_matrix, inverse=inverse) for measurement_i in measurement])
             reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
 
@@ -62,6 +117,7 @@ def test_kwiat_gammas_reconstruction(
         metrics[name] /= len(test_loader)
         try:
             print(f'{name}: {metrics[name]:.4f}')
+            metrics[name] = metrics[name].item()
         except:
             pass
     return metrics
