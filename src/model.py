@@ -193,19 +193,20 @@ class RecurrentMeasurementPredictor(nn.Module):
 
 
 class LSTMMeasurementPredictor(nn.Module):
-    def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+    def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16, noise_level: float = 0.1):
         super(LSTMMeasurementPredictor, self).__init__()
         self.max_num_measurements = max_num_measurements
         self.num_qubits = num_qubits
         self.basis_dim = 2 * (num_qubits*4)
         self.basis_sufficient_params = num_qubits*4
         self.dens_matrix_dim = 2 * (4 ** num_qubits)
+        self.noise_level = noise_level
         # self.measurement_predictor = MLP(layers, 1 + self.basis_dim, hidden_size, self.basis_sufficient_params)
         self.measurement_predictor = nn.LSTMCell(1 + self.basis_dim, hidden_size)
         self.projector = nn.Linear(hidden_size, self.basis_sufficient_params)
         self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
 
-    def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
+    def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor, add_noise_to_measurement_basis: bool = False):
         measurement, basis = first_measurement
         basis_as_vector = torch.stack((basis.real, basis.imag), dim=-1).view(-1, basis.shape[1]*2*2*2)
         measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
@@ -220,6 +221,8 @@ class LSTMMeasurementPredictor(nn.Module):
             # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
             h_i, c_i  = self.measurement_predictor(measurement_predictor_input, (h_i, c_i))
             measurement_basis_vectors = self.projector(h_i)
+            if add_noise_to_measurement_basis:
+                measurement_basis_vectors += torch.randn_like(measurement_basis_vectors) * self.noise_level
             basis_matrices = self.construct_basis_matrices(measurement_basis_vectors)
             new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(-1, basis.shape[1]*2*2*2)
             new_measurements = torch.stack([measure(rho_complex_k, basis_matrices_k) for rho_complex_k, basis_matrices_k in zip(rho_complex, basis_matrices)]).unsqueeze(-1)
@@ -274,9 +277,25 @@ class LSTMMeasurementPredictor(nn.Module):
     def save(self, path: str):
         torch.save(self.state_dict(), path)
 
-    def load(self, path: str):
-        self.load_state_dict(torch.load(path))
+    def load(self, path: str, **kwargs):
+        self.load_state_dict(torch.load(path, **kwargs))
 
+
+class LSTMAttentionMeasurementPredictor(LSTMMeasurementPredictor):
+    def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+        super(LSTMAttentionMeasurementPredictor, self).__init__(num_qubits, layers, hidden_size, max_num_measurements)
+        self.matrix_reconstructor = LSTMAttentioDensityMatrixnReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
+
+    def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
+        matrices_w_attention, predicted_bases = super().forward(first_measurement, rho)
+        matrices, attention = matrices_w_attention
+        reconstructed_rhos = []
+        reconstructed_rho = torch.zeros_like(matrices[:, 0])
+        for i in range(self.max_num_measurements):
+            reconstructed_rho = (1 - attention[:, i]) * reconstructed_rho.detach() + attention[:, i] * matrices[:, i]
+            reconstructed_rhos.append(reconstructed_rho)
+        return torch.stack(reconstructed_rhos, dim=1), predicted_bases
+    
 
 class LSTMMeasurementPredictorBasedOnReconstructedMatrix(nn.Module):
     def __init__(self, num_qubits: int , layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
@@ -485,7 +504,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
             for target_measurement_with_basis in target_measurements_with_basis
         ], dim=1)
         total_target_measurements_matrices = [target_measurements_matrices]
-        measurement_predictor_input = target_measurements_with_basis[0] # it was unused before!!
+        measurement_predictor_input = target_measurements_with_basis[0] # it was unused before the fix!!
 
         used_measurement_bases_ids: t.List[t.Set[int]] = [{0} for _ in range(measurement.shape[0])]
         
@@ -574,6 +593,89 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
 
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
+
+
+class LSTMDiscreteMeasurementSelectorOptimized(LSTMDiscreteMeasurementSelector):
+    def forward(self, all_measurements: t.List[t.Tuple[torch.Tensor, torch.Tensor]], rho: torch.Tensor, predict_target_basis: bool = False, add_noise_while_selecting_basis: bool = False):
+        target_measurements_with_basis = []
+        for measurment_tuple in all_measurements:
+            measurement, basis = measurment_tuple
+            basis_as_vector = torch.stack((basis.real, basis.imag), dim=-1).view(-1, self.num_qubits*2*2*2)
+            measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+            target_measurements_with_basis.append(measurement_predictor_input)
+
+        first_measurement = all_measurements[0]
+        measurement, basis = first_measurement
+        h_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
+        c_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
+
+        predicted_measurements_with_basis = [target_measurements_with_basis[0]]
+        first_measurements_basis_probability = torch.zeros(measurement.shape[0], self.num_qubits, len(self.bases), device=measurement.device)
+        first_measurements_basis_probability[:, :, 0] = 1.0
+        predicted_bases_probabilities = [first_measurements_basis_probability]
+        basis_matrices = self.bases.to(rho.device) # shape (len(bases), 2, 2)
+        
+        total_target_basis_ids = []
+        measurement_predictor_input = target_measurements_with_basis[0] # it was unused before the fix!!
+
+        used_measurement_bases_ids: t.List[t.Set[int]] = [{0} for _ in range(measurement.shape[0])]
+        
+        for i in range(self.max_num_measurements - 1):
+            # measurement_basis_vectors = self.measurement_predictor(measurement_predictor_input)
+            h_i, c_i  = self.measurement_selector(measurement_predictor_input, (h_i, c_i))
+            measurement_basis_probability = torch.stack([projector(h_i) for projector in self.projectors], dim=1) # shape (batch, num_qubits, len(bases))
+
+            new_measurement_predictor_input = []
+            for k, (rho_k, measurement_basis_probability_k) in enumerate(zip(rho, measurement_basis_probability)):
+                rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
+                
+                # Option 1) argmax
+                # selected_basis_indices = torch.argmax(measurement_basis_probability_k, dim=-1) # shape (num_qubits)
+                
+                # Option 2) Filtered argmax (choosing highest probability from those not chosen yet)
+                probabilites = reduce(torch.kron, torch.unbind(measurement_basis_probability_k, dim=0)) # shape (len(bases) ** num_qubits)
+                sorted_indices = torch.argsort(probabilites, descending=True, dim=-1)
+                # get the highest probability index that was not used yet
+                selected_multiqubit_basis_id = self._get_first_index_not_in_set(sorted_indices, used_measurement_bases_ids[k])
+                used_measurement_bases_ids[k].add(selected_multiqubit_basis_id)
+                selected_basis_indices = torch.tensor(self.multiqubit_bases_ids[selected_multiqubit_basis_id]).to(measurement.device)
+
+                discrete_basis_matrices = basis_matrices[selected_basis_indices]                
+
+                new_measurement = measure(rho_k, discrete_basis_matrices) # old: (discrete_basis_matrices[0], discrete_basis_matrices[1])) # assuming 2 qubits
+                new_basis_as_vector = torch.stack((discrete_basis_matrices.real, discrete_basis_matrices.imag), dim=-1).view(self.num_qubits*2*2*2)
+                new_measurement_predictor_input.append(torch.cat((new_measurement.unsqueeze(0), new_basis_as_vector), dim=-1))
+
+            measurements_with_basis = torch.stack(predicted_measurements_with_basis, dim=1)
+            if predict_target_basis:
+                target_reconstruction_losses = []
+                with torch.no_grad():
+                    for target_measurement_with_basis in target_measurements_with_basis:
+                        current_measurements_with_basis = torch.cat((measurements_with_basis, target_measurement_with_basis.unsqueeze(1)), dim=1)
+                        target_measurement_matrix = self.matrix_reconstructor(current_measurements_with_basis)[:, -1] # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
+                        reconstruction_losses = torch.nn.functional.mse_loss(
+                            target_measurement_matrix,  # skipping the first basis as it is always chosen as the first measurement
+                            rho,
+                            reduction='none'
+                        ).mean(dim=(-1, -2, -3))
+                        if add_noise_while_selecting_basis:
+                            reconstruction_losses = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
+                        target_reconstruction_losses.append(reconstruction_losses)
+                    target_reconstruction_losses = torch.stack(target_reconstruction_losses, dim=1) # shape (batch, len(all_measurements))
+                target_basis_ids = torch.argmin(target_reconstruction_losses, dim=1).detach() # shape (batch,)
+            else:
+                target_basis_ids = torch.zeros(measurement.shape[0], device=measurement.device, dtype=torch.int64)
+
+            measurement_predictor_input = torch.stack(new_measurement_predictor_input, dim=0)
+            predicted_measurements_with_basis.append(measurement_predictor_input)
+            predicted_bases_probabilities.append(measurement_basis_probability)
+            total_target_basis_ids.append(target_basis_ids)
+
+        predicted_bases_probabilities = torch.stack(predicted_bases_probabilities, dim=1) # shape (batch, max_num_measurements, num_qubits, len(bases))
+        predicted_measurements_with_basis = torch.stack(predicted_measurements_with_basis, dim=1)
+        predicted_measurements_matrices = self.matrix_reconstructor(predicted_measurements_with_basis) #.detach()) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
+        total_target_basis_ids = torch.stack(total_target_basis_ids, dim=1) # shape (batch, max_num_measurements, 1)
+        return predicted_measurements_matrices, predicted_bases_probabilities, total_target_basis_ids
 
 
 class LSTMDiscreteMeasurementSelectorForConcurrence(LSTMDiscreteMeasurementSelector):
@@ -706,6 +808,35 @@ class LSTMDensityMatrixReconstructor(nn.Module):
 
     def load(self, path: str):
         self.load_state_dict(torch.load(path))
+
+
+class LSTMAttentioDensityMatrixnReconstructor(nn.Module):
+    def __init__(self, input_dim: int, num_qubits: int, layers: int = 2, hidden_size: int = 16, bias: bool = True):
+        super(LSTMAttentioDensityMatrixnReconstructor, self).__init__()
+        self.num_qubits = num_qubits
+        self.lstm = nn.LSTM(input_dim, hidden_size, layers, proj_size=2* 2 * (4 ** num_qubits), batch_first=True, bias=bias)
+
+    def reinitialize(self):
+        for name, p in self.named_parameters():
+            if 'lstm' in name:
+                if 'weight_ih' in name:
+                    nn.init.xavier_uniform_(p.data)
+                elif 'weight_hh' in name:
+                    nn.init.orthogonal_(p.data)
+
+    def forward(self, measurements_with_basis: torch.Tensor):
+        out, _ = self.lstm(measurements_with_basis)
+        value_w_attention = out.view(measurements_with_basis.shape[0], measurements_with_basis.shape[1], 2, 2, 2 ** self.num_qubits, 2 ** self.num_qubits)
+        value = value_w_attention[:, :, 0]
+        attention = torch.sigmoid(value_w_attention[:, :, 1])
+        return value, attention
+
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: str):
+        self.load_state_dict(torch.load(path))
+
 
 
 class LSTMConcurrencePredictor(nn.Module):

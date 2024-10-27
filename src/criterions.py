@@ -87,6 +87,35 @@ def bases_loss(
     return bases_loss
 
 
+def contrastive_bases_loss(
+    predicted_bases: torch.Tensor, # shape (batch_size, num_measurements, num_qubits, 2, 2)
+    reduction: str = 'mean'
+) -> torch.Tensor:
+    predicted_bases_complex_stack = torch.stack((predicted_bases.real, predicted_bases.imag), dim=-3)
+    predicted_bases_flatten = predicted_bases_complex_stack.view(predicted_bases.shape[0], predicted_bases.shape[1], -1)
+    cdist = torch.cdist(predicted_bases_flatten, predicted_bases_flatten, p=2)
+    loss = -cdist.mean(dim=-1).mean(dim=-1) # minus sign to convert distance to similarity so that minimizing loss maximizes differences
+    if reduction == 'mean':
+        return loss.mean()
+    return loss
+
+
+def contrastive_bases_trace_norm_loss(
+    predicted_bases: torch.Tensor, # shape (batch_size, num_measurements, num_qubits, 2, 2)
+    reduction: str = 'mean'
+) -> torch.Tensor:
+    trace_norms = []
+    for measurement_idx in range(1, predicted_bases.shape[1]):
+        matrix_diff = predicted_bases[:, measurement_idx:measurement_idx+1] - predicted_bases[:, :measurement_idx].detach()
+        trace_norms_for_measurement = torch.linalg.matrix_norm(matrix_diff, ord=1, dim=(-2, -1)).mean(dim=-1).mean(dim=-1)
+        trace_norms.append(trace_norms_for_measurement)
+    trace_norms = torch.stack(trace_norms)
+    loss = trace_norms
+    if reduction == 'mean':
+        return loss.mean()
+    return loss
+
+
 def complex_distance(
     input: torch.Tensor,
     target: torch.Tensor,

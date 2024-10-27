@@ -18,26 +18,27 @@ from src.logging import log_metrics_to_file, plot_metrics_from_file
 
 def main():
     # load data
+    num_qubits = 1
     batch_size = 128
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis_kwiat_basis_loss'
-    model_save_path = f'./models/{model_name}.pt'
+    model_name = 'full_lstm_measure_basis'
+    model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     
     model_params = {
-        'num_qubits': 2,
+        'num_qubits': num_qubits,
         'layers': 6,
         'hidden_size': 128,
-        'max_num_measurements': 16
+        'max_num_measurements': 4**num_qubits
     }
     # model = SequentialMeasurementPredictor(**model_params)
     model = LSTMMeasurementPredictor(**model_params)
-    model.load(model_save_path)
+    model.load(model_save_path, map_location=torch.device('cpu'))
 
     # train & test model
-    log_path = f'./logs/{model_name}_meauremnt_dependence.log'
+    log_path = f'./logs/{num_qubits}qbits/{model_name}_meauremnt_dependence.log'
     criterion = nn.MSELoss()
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
     criterions = {
@@ -51,7 +52,7 @@ def main():
         metrics_dict = {metrics_name: test_metrics[metrics_name][f'measurement {i}'] for metrics_name in test_metrics.keys()}
         write_mode = 'w' if i == 0 else 'a'
         log_metrics_to_file(metrics_dict, log_path,  xaxis=i, xaxis_name='num measurements', write_mode=write_mode)
-    plot_metrics_from_file(log_path, title='Metrics for measurement disturbance', save_path=f'./plots/{model_name}_meauremnt_dependence.png', xaxis='num measurements')
+    plot_metrics_from_file(log_path, title='Metrics for measurement disturbance', save_path=f'./plots/{model_name}_measurement_dependence.png', xaxis='num measurements')
 
 
 if __name__ == '__main__':

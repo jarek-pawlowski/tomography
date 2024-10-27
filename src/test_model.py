@@ -174,7 +174,8 @@ def test_tomography_corrections_predictor(
     test_loader: DataLoader,
     criterions: t.Dict[str, t.Callable],
     measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
-    model_input_info: str = 'full' # 'full', 'measurement' or 'measurement_basis'
+    model_input_info: str = 'full', # 'full', 'measurement' or 'measurement_basis'
+    std_out: t.Optional[t.IO] = None
 ) -> t.Dict[str, t.List[float]]:
 
     model.eval()
@@ -197,7 +198,7 @@ def test_tomography_corrections_predictor(
     gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
 
     with torch.no_grad():
-        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...', file=std_out):
             rho, measurement = rho.to(device), measurement.to(device)
             if type(measurements_subset) == int:
                 measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
@@ -231,7 +232,7 @@ def test_tomography_corrections_predictor(
         metrics[name] /= len(test_loader)
         try:
             metrics[name] = metrics[name].item()
-            print(f'{name}: {metrics[name]:.4f}')
+            print(f'{name}: {metrics[name]:.4f}', file=std_out)
         except:
             pass
     return metrics

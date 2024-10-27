@@ -11,8 +11,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorBasedOnReconstructedMatrix
-from src.criterions import bases_loss
+from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorBasedOnReconstructedMatrix, LSTMAttentionMeasurementPredictor
+from src.criterions import bases_loss, contrastive_bases_loss, contrastive_bases_trace_norm_loss
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 
@@ -27,7 +27,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis_rho_input_hs256_detach'
+    model_name = 'full_lstm_measure_basis_contrastive_bases_trace_norm0_01_ep4'
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -42,7 +42,8 @@ def main():
         'hidden_size': 256,
         'max_num_measurements': 4**num_qubits,
     }
-    model = LSTMMeasurementPredictorBasedOnReconstructedMatrix(**model_params)
+    model = LSTMMeasurementPredictor(**model_params)
+    # model = LSTMAttentionMeasurementPredictor(**model_params)
 
     # train & test model
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
@@ -58,7 +59,7 @@ def main():
     best_test_loss = float('inf')
     last_measurement_idx = 4**num_qubits - 1
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, increase_loss_weights_with_measurement=False) #, bases_loss_fn=kwiat_basis_loss_fn)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, increase_loss_weights_with_measurement=False, add_noise_to_measurement_basis=False, bases_loss_fn=contrastive_bases_trace_norm_loss, bases_loss_weight=0.001, contrastive_loss_start_epoch=4)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss'][f'measurement {last_measurement_idx}'] < best_test_loss:
             best_test_loss = test_metrics['test_loss'][f'measurement {last_measurement_idx}']

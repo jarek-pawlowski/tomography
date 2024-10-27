@@ -11,14 +11,20 @@ from src.model import Regressor, Classifier
 from src.criterions import regressor_accuracy
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
+measurement_subset = [2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+def parse_measurement_subset(measurement_subset):
+    str_list = '_'.join([str(x) for x in measurement_subset])
+    return f'm{str_list}'
+
 batch_size = 512
-test_dataset = MeasurementDataset(root_path='./data/val/') #measurement_subset=[2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+test_dataset = MeasurementDataset(root_path='./data/val/', measurement_subset=measurement_subset)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-model_name = 'regressor'
+model_name = f'regressor_{parse_measurement_subset(measurement_subset)}'
 model_path = f'./models/{model_name}.pt'
 model_params = {
-    'input_dim': 16,
+    'input_dim': len(measurement_subset),
     'output_dim': 1,
     'layers': 2,
     'hidden_size': 128,
@@ -30,7 +36,7 @@ model.load(model_path, map_location='cpu')
 
 rmse_loss = lambda x, y: torch.sqrt(torch.functional.F.mse_loss(x, y))
 mse_loss = nn.MSELoss()
-accuracy = lambda x, y: regressor_accuracy(x, y, input_threshold=0.05, target_threshold=1.e-3)
+accuracy = lambda x, y: regressor_accuracy(x, y, input_threshold=0.05, target_threshold=1.e-6)
 criterions = {
     'test_rmse_loss': rmse_loss,
     'test_mse_loss': mse_loss,
@@ -39,4 +45,4 @@ criterions = {
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 test_metrics = test(model, device, test_loader, criterions)
-log_metrics_to_file(test_metrics, f'./logs/{model_name}_test2.log', write_mode='w')
+log_metrics_to_file(test_metrics, f'./logs/{model_name}_test_1e-6.log', write_mode='w')

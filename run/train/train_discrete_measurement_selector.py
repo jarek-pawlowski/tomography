@@ -1,6 +1,5 @@
 import sys
 
-from src.train import train_discrete_measurement_selector
 sys.path.append('./')
 import os
 
@@ -10,7 +9,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import LSTMDiscreteMeasurementSelector
+from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized
+from src.train import train_discrete_measurement_selector, train_optimized_discrete_measurement_selector
 from src.test_model import test_discrete_measurement_selector
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
@@ -19,26 +19,27 @@ from src.tomography_utils_numpy import Kwiat
 def main():
     # load data
     batch_size = 64
-    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True)
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    num_qubits = 2
+    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'discrete_lstm_basis_selector_reduced_kwiat_basis_cross_entropy_loss'
+    model_name = 'discrete_optimized_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
 
     model_params = {
-        'num_qubits': 2,
+        'num_qubits': num_qubits,
         'possible_basis_matrices': basis_matrices, # 'Kwiat' basis matrices
         'layers': 6,
         'hidden_size': 128,
-        'max_num_measurements': 16
+        'max_num_measurements': 4**num_qubits
     }
-    model = LSTMDiscreteMeasurementSelector(**model_params)
+    model = LSTMDiscreteMeasurementSelectorOptimized(**model_params)
 
     # train & test model
     log_path = f'./logs/{model_name}.log'
@@ -55,10 +56,10 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1)
+        train_metrics = train_optimized_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1)
         test_metrics = test_discrete_measurement_selector(model, device, test_loader, criterions, model_params['max_num_measurements'])
-        if test_metrics['test_loss']['measurement 15'] < best_test_loss:
-            best_test_loss = test_metrics['test_loss']['measurement 15']
+        if test_metrics['test_loss'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
+            best_test_loss = test_metrics['test_loss'][f'measurement {4**num_qubits - 1}']
             model.save(model_save_path)
         # make test_metrics flat
         test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}

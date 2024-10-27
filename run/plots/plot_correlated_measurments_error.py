@@ -27,8 +27,8 @@ def main():
     log_path_discrete_noise_break_unique_kwiat_basis_lstm = './logs/discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs_measuremnt_dependence.log'
     log_path_tomography = './logs/2qbit/rho_test_varying_random_measurement_clipped_tomography_avg.log'
     log_path_zeroed_tomography = './logs/2qbit/rho_test_varying_zeroed_measurement_clipped_tomography_avg.log'
-    log_path_mle_intensity = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized_intensity.log'
-    log_path_mle = './logs/rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_optimized.log'
+    log_path_mle_intensity =  './logs/2qbit/mle_intensity_rho_test_varying_measurement_clipped_tomography_avg.log'
+    log_path_mle = './logs/2qbit/mle_rho_test_varying_measurement_clipped_tomography_avg.log'
     log_path_basis_gammas = './logs/density_matrix_reconstructor_from_basis_gammas_measurements_subset.log'
     log_path_pinv_gammas = './logs/2qbit/density_matrix_reconstructor_from_pinv_gammas_v2.log'
     log_path_reconstructor = './logs/density_matrix_reconstructor_measurements_subset.log'
@@ -37,16 +37,16 @@ def main():
     log_path_discrete_measurement_basis_tomography_corrections_lstm = './logs/tomo_corrections_discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_measurement_dependence.log'
     log_path_mean_reconstruction = './logs/2qbit/density_matrix_reconstructor_from_mean.log'
 
-    plot_path = './plots/correlated_measurements_error_mse_new_nn_with_pinv.png'
+    plot_path = './plots/correlated_measurements_error_bures_new_final.png'
 
-    # metric_to_plot = 'bures_distance' 
-    metric_to_plot =  'test_loss'
-    # fixed_metric_name = 'bures_distance' 
-    fixed_metric_name = 'test_mse_loss'
-    # new_metric_name =  'bures_distance_avg' 
-    new_metric_name = 'test_loss_avg'
-    # pinv_metrics_name = 'bures_distance_avg' 
-    pinv_metrics_name = 'mse_loss_avg'
+    metric_to_plot = 'bures_distance' 
+    # metric_to_plot =  'test_loss'
+    fixed_metric_name = 'bures_distance' 
+    # fixed_metric_name = 'test_mse_loss'
+    new_metric_name =  'bures_distance_avg' 
+    # new_metric_name = 'test_loss_avg'
+    pinv_metrics_name = 'bures_distance_avg' 
+    # pinv_metrics_name = 'mse_loss_avg'
 
 
     # load data
@@ -78,10 +78,10 @@ def main():
     zeroed_tomography_fixed_metrics = np.flip(metrics_zeroed_tomography[fixed_metric_name])
 
     mle_intensity_fixed_metrics = np.insert(metrics_mle_intensity[fixed_metric_name], 0, 0)
-    mle_intensity_fixed_metrics = np.flip(mle_intensity_fixed_metrics)[1:]
+    mle_intensity_fixed_metrics = np.flip(mle_intensity_fixed_metrics)
 
     mle_fixed_metrics = np.insert(metrics_mle[fixed_metric_name], 0, 0)
-    mle_fixed_metrics = np.flip(mle_fixed_metrics)[1:]
+    mle_fixed_metrics = np.flip(mle_fixed_metrics)
 
     metrics_mean_reconstruction_expanded = np.repeat(metrics_mean_reconstruction[fixed_metric_name], 16)
 
@@ -92,22 +92,22 @@ def main():
     # plot
     # plt.plot(np.arange(1, 17), tomography_fixed_metrics, label='Kwiat basis tomography')
     # plt.plot(np.arange(1, 17), zeroed_tomography_fixed_metrics, label='Kwiat basis tomography with zeroed measurements')
-    # plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, label='Kwiat basis MLE with intensity')
-    # plt.plot(np.arange(1, 17), mle_fixed_metrics, label='Kwiat basis MLE')
+    plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, label='Kwiat basis MLE with intensity')
+    plt.plot(np.arange(1, 17), mle_fixed_metrics, label='Kwiat basis MLE')
     # plt.plot(np.arange(1, 17), metrics_basis_gammas[new_metric_name], label='Tomography with measurement projector gammas')
     plt.plot(np.arange(1, 17), metrics_pinv_gammas[pinv_metrics_name], label='Tomography with pseudoinverse')
     plt.plot(np.arange(1, 17), metrics_reconstructor[new_metric_name], label='Fully connected NN reconstructor on random measurements')
-    plt.plot(np.arange(1, 17), metrics_smp[metric_to_plot], label='Arbitrary basis fully connected NN')
+    # plt.plot(np.arange(1, 17), metrics_smp[metric_to_plot], label='Arbitrary basis fully connected NN')
     plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], label='Arbitrary basis LSTM')
-    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
-    plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')
-    plt.plot(np.arange(1, 17), metrics_kwiat_basis_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis and loss')
-    plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis')
-    plt.plot(np.arange(1, 17), metrics_discrete_noise_break_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis, noise turned off after 10 epochs')
-    plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete unique Kwiat basis, noise turned off after 10 epochs')
+    # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
+    # plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')
+    # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis and loss')
+    # plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis')
+    # plt.plot(np.arange(1, 17), metrics_discrete_noise_break_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis, noise turned off after 10 epochs')
+    plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete unique Kwiat basis') # noise turned off after 10 epochs
     plt.plot(np.arange(1, 17), metrics_tomography_corrections[new_metric_name], label='Tomography corrections predictor')
     plt.plot(np.arange(1, 17), metrics_tomography_corrections_basis_only[new_metric_name], label='Tomography corrections predictor from measurement basis')
-    plt.plot(np.arange(1, 17), metrics_discrete_measurement_basis_tomography_corrections_lstm[fixed_metric_name], label='Tomography corrections LSTM predictor from discrete unique Kwiat basis')
+    # plt.plot(np.arange(1, 17), metrics_discrete_measurement_basis_tomography_corrections_lstm[fixed_metric_name], label='Tomography corrections LSTM predictor from discrete unique Kwiat basis')
     plt.plot(np.arange(1, 17), metrics_mean_reconstruction_expanded, '--', label='Mean reconstruction')
 
     plt.xticks(np.arange(1, 17))
