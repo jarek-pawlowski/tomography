@@ -5,36 +5,37 @@ import os
 
 import matplotlib.pyplot as plt
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 
 from src.tomography_utils_numpy import Kwiat
 from src.datasets import DerandomizedTestMeasurementDataset
-from src.model import LSTMDiscreteMeasurementSelector, LSTMMeasurementPredictor, LSTMMeasurementSelector
+from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized, LSTMMeasurementPredictor, LSTMMeasurementSelector
 from src.model_utils import collect_rhos_with_closest_kwiat_bases, collect_kwiat_measurements_basis_probabilities_from_discrete_model, collect_measurements_outputs_from_model
 from src.logging import plot_matrices
 
 batch_size = 128
-data_name = 'single'
+data_name = 'Xs'
 test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/{data_name}')
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
 
 # create model
-# model_name = 'discrete_lstm_basis_selector_fixed_input_reduced_kwiat_basis_cross_entropy_loss'
-model_name = 'full_lstm_measure_basis'
-model_save_path = f'./models/{model_name}.pt'
+model_name = 'Xs_discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
+# model_name = 'full_lstm_measure_basis'
+model_save_path = f'./models/2qbits/{model_name}.pt'
 
 model_params = {
     'num_qubits': 2,
-    # 'possible_basis_matrices': basis_matrices, # 'Kwiat' basis matrices
+    'possible_basis_matrices': basis_matrices, # 'Kwiat' basis matrices
     'layers': 6,
     'hidden_size': 128,
     'max_num_measurements': 16
 }
 
-# model = LSTMDiscreteMeasurementSelector(**model_params)
-model = LSTMMeasurementPredictor(**model_params)
+model = LSTMDiscreteMeasurementSelector(**model_params)
+# model = LSTMDiscreteMeasurementSelectorOptimized(**model_params)
+# model = LSTMMeasurementPredictor(**model_params)
 model.load(model_save_path)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -42,14 +43,28 @@ for i in range(len(test_dataset)):
     test_rho, test_measurement = test_dataset[i]
     most_important_measurements_order = torch.argsort(test_measurement, descending=True)
     # if the most important measurements are the ones with the highest values, cant we just check if the value of the measurement is the highest in the first proposed measurements?
-    # predicted_basis_probabilities, predicted_rhos = collect_kwiat_measurements_basis_probabilities_from_discrete_model(model, device, test_measurement, test_rho)
+    predicted_basis_probabilities, predicted_rhos = collect_kwiat_measurements_basis_probabilities_from_discrete_model(model, device, test_measurement, test_rho)
+    sorted_predicted_measurements_ids = torch.argsort(predicted_basis_probabilities, descending=True, dim=1)
+    chosen_measurements = []
+    for sorted_predicted_measurement in sorted_predicted_measurements_ids:
+        for measurement_id in sorted_predicted_measurement:
+            if measurement_id not in chosen_measurements:
+                chosen_measurements.append(measurement_id)
+                break
+    measurements_ids = torch.tensor(chosen_measurements)
     # measurements_ids = torch.argmax(predicted_basis_probabilities, dim=1)
-    # predicted_measurements = test_measurement[measurements_ids.cpu()]
-    predicted_bases, predicted_measurements, predicted_rhos = collect_measurements_outputs_from_model(model, device, test_measurement, test_rho)
-    measurements_ids = [
-        f'I:{b[0, 0, 0].real:.2f}-{b[0, 0, 1]:.2f}\nII:{b[1, 0, 0].real:.2f}-{b[1, 0, 1]:.2f}'
-    for b in predicted_bases
-    ]
+    
+    predicted_measurements = test_measurement[measurements_ids.cpu()]
+    
+    # predicted_bases, predicted_measurements, predicted_rhos = collect_measurements_outputs_from_model(model, device, test_measurement, test_rho)
+    # measurements_ids = [
+    #     f'I:{b[0, 0, 0].real:.2f}-{b[0, 0, 1]:.2f}\nII:{b[1, 0, 0].real:.2f}-{b[1, 0, 1]:.2f}'
+    # for b in predicted_bases
+    # ]
+
+    # predicted_base_save_path = f'./data/predicted_bases/{data_name}/{model_name}'
+    # os.makedirs(predicted_base_save_path, exist_ok=True)
+    # np.save(f'{predicted_base_save_path}/predicted_bases_for_state_{i}.npy', predicted_bases.cpu().detach().numpy())
 
     error = (predicted_rhos.cpu() - test_rho.unsqueeze(0).expand(predicted_rhos.shape)).abs().mean(dim=(1, 2, 3)).detach().numpy()
 

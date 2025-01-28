@@ -14,6 +14,7 @@ from src.tomography_utils_torch import reconstruct, reconstruct_with_nn_correcti
 from src.data_utils import generate_sample_from_mean_and_covariance
 from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat, Kwiat_projectors
 from src.train import reconstruct_rho_from_corrections_dynamic_selection
+from src.model_utils import calculate_cumulative_model_output_varying_feature
 
 
 def test(
@@ -175,7 +176,9 @@ def test_tomography_corrections_predictor(
     criterions: t.Dict[str, t.Callable],
     measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
     model_input_info: str = 'full', # 'full', 'measurement' or 'measurement_basis'
-    std_out: t.Optional[t.IO] = None
+    std_out: t.Optional[t.IO] = None,
+    trace_normalization: bool = False,
+    use_m2_corrections: bool = False,
 ) -> t.Dict[str, t.List[float]]:
 
     model.eval()
@@ -217,13 +220,29 @@ def test_tomography_corrections_predictor(
                 measurement_predictor_input = basis_as_vector
             else:
                 raise ValueError(f'Unknown model_input_info: {model_input_info}')
-            inverse_corrections, r_corrections = model(measurement_predictor_input)
+
+            if use_m2_corrections:
+                m2_corrections, inverse_corrections, r_corrections = model(measurement_predictor_input)
+                complex_m2_corrections = torch.complex(m2_corrections[:, 0], m2_corrections[:, 1])
+            else:
+                inverse_corrections, r_corrections = model(measurement_predictor_input)
+                complex_m2_corrections = None
+
             complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
             complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
             reconstructed_rho = torch.stack([
-                reconstruct_with_nn_corrections(measurement_i, selected_projection_vectors, gammas, inverse_correction_i, r_correction_i)
-                for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+                reconstruct_with_nn_corrections(
+                    measurement_i,
+                    selected_projection_vectors,
+                    gammas,
+                    inverse_correction_i,
+                    r_correction_i,
+                    complex_m2_corrections[i] if complex_m2_corrections is not None else None
+                )
+                for i, (measurement_i, inverse_correction_i, r_correction_i) in enumerate(zip(measurement, complex_inverse_corrections, complex_r_corrections))
             ])
+            if trace_normalization:
+                reconstructed_rho = reconstructed_rho / torch.vmap(torch.trace)(reconstructed_rho).view(-1, 1, 1)
             reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
 
             for name, criterion in criterions.items():
@@ -333,7 +352,7 @@ def test_varying_input(
     return metrics
 
 
-def test_varying_feature(
+def test_varying_feature_with_value_range(
     model: t.Union[nn.Module, t.Callable],
     device: torch.device,
     test_loader: DataLoader,
@@ -370,6 +389,88 @@ def test_varying_feature(
     distance_metrics = {
         criterion_name: criterion(distances) for criterion_name, criterion in criterions.items()
     }
+    return mean_metrics, distance_metrics
+
+
+def test_varying_feature_with_noise(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    feature_idx: t.Optional[t.List[int]],
+    feature_noise_variance: float = 0.5,
+    num_repetitions: int = 10,
+    model_output_mean: t.Optional[t.Union[torch.Tensor, t.Tuple[torch.Tensor, torch.Tensor]]] = None,
+    label_separate_output: bool = False,
+    split_thresholds: t.List[float] = [0., 1.e-6, 1.01],
+) -> t.Dict[str, t.List[float]]:
+
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+
+    avg_outputs = defaultdict(float)
+    avg_distances = defaultdict(float)
+    num_classes = len(split_thresholds) - 1
+    if label_separate_output:
+        separate_avg_outputs = {label: defaultdict(float) for label in range(num_classes)}
+        separate_avg_distances = {label: defaultdict(float) for label in range(num_classes)}
+    for i in range(num_repetitions):
+        with torch.no_grad():
+            for data, target in tqdm(test_loader):
+                data, target = data.to(device), target.to(device)
+                data_min = torch.maximum(data[:, torch.tensor(feature_idx)] - feature_noise_variance, torch.zeros_like(data[:, torch.tensor(feature_idx)]))
+                data_max = torch.minimum(data[:, torch.tensor(feature_idx)] + feature_noise_variance, torch.ones_like(data[:, torch.tensor(feature_idx)]))
+                interval = data_max - data_min + 1e-6
+                varied_data = torch.rand_like(interval) * interval + data_min
+                data[:, torch.tensor(feature_idx)] = varied_data
+                output = model(data)
+                if model_output_mean is not None:
+                    if label_separate_output:
+                        for label in range(num_classes):
+                            label_output = output[torch.logical_and(target >= split_thresholds[label], target < split_thresholds[label + 1])]
+                            label_model_output_mean = model_output_mean[1][label]
+                            separate_avg_distances[label][i] += torch.abs(label_output - label_model_output_mean).mean().item()
+                        avg_distances[i] += torch.abs(output - model_output_mean[0]).mean().item()
+                    else:
+                    # avg_distances[i] += ((torch.abs(output - model_output_mean) * interval).sum() / interval.sum()).item()
+                        avg_distances[i] += torch.abs(output - model_output_mean).mean().item()
+                # avg_outputs[i] += ((output * interval).sum() / interval.sum()).item()    
+                if label_separate_output:
+                    for label in range(num_classes):
+                        label_output = output[torch.logical_and(target >= split_thresholds[label], target < split_thresholds[label + 1])]
+                        separate_avg_outputs[label][i] += label_output.mean().item()
+                avg_outputs[i] += output.mean().item()
+
+        if label_separate_output:
+            for label in range(num_classes):
+                separate_avg_outputs[label][i] /= len(test_loader)
+                separate_avg_distances[label][i] /= len(test_loader)
+        avg_outputs[i] /= len(test_loader)
+        avg_distances[i] /= len(test_loader)
+
+    outputs = torch.tensor(list(avg_outputs.values()))
+    mean_metrics = {
+        criterion_name: criterion(outputs) for criterion_name, criterion in criterions.items()
+    }
+    distances = torch.tensor(list(avg_distances.values()))
+    distance_metrics = {
+        criterion_name: criterion(distances) for criterion_name, criterion in criterions.items()
+    }
+
+    if label_separate_output:
+        separate_outputs = {label: torch.tensor(list(separate_avg_outputs[label].values())) for label in range(num_classes)}
+        separate_mean_metrics = {
+            label: {criterion_name: criterion(separate_outputs[label]) for criterion_name, criterion in criterions.items()}
+            for label in range(num_classes)
+        }
+        separate_distances = {label: torch.tensor(list(separate_avg_distances[label].values())) for label in range(num_classes)}
+        separate_distance_metrics = {
+            label: {criterion_name: criterion(separate_distances[label]) for criterion_name, criterion in criterions.items()}
+            for label in range(num_classes)
+        }
+        return mean_metrics, distance_metrics, separate_mean_metrics, separate_distance_metrics
+    
     return mean_metrics, distance_metrics
 
 
@@ -440,3 +541,48 @@ def test_output_statistics_varying_feature(
         criterion_name: criterion(outputs) for criterion_name, criterion in criterions.items()
     }
     return metrics
+
+
+def calculate_model_mad_varying_feature(
+    model: t.Union[nn.Module, t.Callable],
+    device: torch.device,
+    data_loader: DataLoader,
+    feature_idx: int,
+    feature_noise_variance: float = 0.5,
+    num_repetitions: int = 10,
+    substract_mean: float = 0.,
+):
+    if isinstance(model, nn.Module):
+        model.eval()
+        model.to(device)
+
+    total_output = 0.
+    with torch.no_grad():
+        for data, _ in tqdm(data_loader, desc=f' Calculating average model output with substract mean {substract_mean:.2f}...'):
+            data = data.to(device)
+            randomized_outputs = torch.stack([
+                _calculate_model_output_from_randomized_input(data, model, feature_idx, feature_noise_variance)
+                for _ in range(num_repetitions)
+            ])
+
+            mad = torch.abs(randomized_outputs - randomized_outputs.mean(dim=0)).mean(dim=0)
+            total_output += torch.abs(mad - substract_mean).sum().item()
+    total_output /= len(data_loader.dataset)
+    print(f'MAD: {total_output:.4f}')
+    return total_output
+
+
+def _calculate_model_output_from_randomized_input(
+    data: torch.Tensor,
+    model: nn.Module,
+    feature_idx: t.List[int],
+    feature_noise_variance: float = 0.5,
+):
+    data_min = torch.maximum(data[:, torch.tensor(feature_idx)] - feature_noise_variance, torch.zeros_like(data[:, torch.tensor(feature_idx)]))
+    data_max = torch.minimum(data[:, torch.tensor(feature_idx)] + feature_noise_variance, torch.ones_like(data[:, torch.tensor(feature_idx)]))
+    interval = data_max - data_min + 1e-6
+    data_i = data.clone()
+    varied_data = torch.rand_like(interval) * interval + data_min
+    data_i[:, torch.tensor(feature_idx)] = varied_data
+    output = model(data_i)
+    return output

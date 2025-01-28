@@ -20,6 +20,7 @@ def main():
     # set paths 
     log_path_lstm = f'./logs/{num_qubits}qbits/full_lstm_measure_basis_meauremnt_dependence.log'
     log_path_pinv_gammas = f'./logs/{num_qubits}qbits/density_matrix_reconstructor_from_pinv_gammas.log'
+    log_path_corections_predictor = f'./logs/{num_qubits}qbits/tomography_corrections_predictor.log'
     
     plot_path = './plots/3_qbits_correlated_measurements_error_bures.png'
 
@@ -36,20 +37,21 @@ def main():
     # load data
     metrics_lstm = load_metrics_from_file(log_path_lstm)
     metrics_pinv_gammas = load_metrics_from_file(log_path_pinv_gammas)
+    metrics_corrections_predictor = load_metrics_from_file(log_path_corections_predictor)
     
-    num_colors = 2
-    cm = plt.get_cmap('tab20')
-    fig, ax = plt.subplots()
+    plt.rcParams.update({'font.size': 12})
+    # fig, ax = plt.subplots()
     # ax.set_prop_cycle(color=[cm(10.*i/num_colors) for i in range(num_colors)])
     # plot
-    plt.plot(np.arange(1, 4**num_qubits+1), metrics_pinv_gammas[pinv_metrics_name], label='Tomography with pseudoinverse')
-    plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm[metric_to_plot], label='Arbitrary basis LSTM')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_pinv_gammas[pinv_metrics_name], color='b', marker='h', markevery=2, markersize=6, fillstyle='none', linestyle='-.', label='Tomography with\npseudoinverse')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_corrections_predictor[new_metric_name], color='orange', marker='o', markevery=2, linestyle='-', markersize=6, fillstyle='none', label='Corrector NN')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm[metric_to_plot], color='r', marker='s', markevery=2, markersize=5, linestyle=':', fillstyle='none', label='LSTM with\nadjusted basis')
 
     # plt.xticks(np.arange(1, 4**num_qubits+1))
-    plt.title('Bures distance for reconstructed density matrix')
-    plt.xlabel('Number of measurements')
+    # plt.title('Bures distance for reconstructed density matrix')
+    plt.xlabel('Number of measurement outcomes')
     plt.ylabel('Bures distance') 
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.legend(prop={'size': 10}) #bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.savefig(plot_path, bbox_inches='tight')
 
 if __name__ == '__main__':

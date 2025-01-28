@@ -36,7 +36,7 @@ for i in range(num_measurements):
         mean_metrics = load_metrics_from_file(mean_results_path)
         mean_metrics_values[i * (num_measurements - 1) + j - 1, :] = [mean_metrics[metric_name][0] for metric_name in metrics_names]
 
-plot_grouped_error_map(nn_metrics_values, title='NN corrections complex distance', save_path=nn_plot_path, values_range=(0, 0.7))
-plot_grouped_error_map(tomo_metrics_values, title='Tomography pinv complex distance', save_path=tomo_plot_path, values_range=(0, 0.7))
-plot_grouped_error_map(hlp_metrics_values, title='HLP complex distance', save_path=hlp_plot_path, values_range=(0, 0.7))
-plot_grouped_error_map(mean_metrics_values, title='Mean reconstruction complex distance', save_path=mean_plot_path, values_range=(0, 0.7))
+plot_grouped_error_map(nn_metrics_values, title='', save_path=nn_plot_path, values_range=(0, 0.7))
+plot_grouped_error_map(tomo_metrics_values, title='', save_path=tomo_plot_path, values_range=(0, 0.7))
+plot_grouped_error_map(hlp_metrics_values, title='', save_path=hlp_plot_path, values_range=(0, 0.7))
+plot_grouped_error_map(mean_metrics_values, title='', save_path=mean_plot_path, values_range=(0, 0.7))

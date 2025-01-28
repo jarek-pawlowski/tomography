@@ -1,7 +1,7 @@
 import sys
 
 from src.model_utils import calculate_mean_model_output_with_varied_feature
-from src.test_model import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, test_varying_feature
+from src.test_model import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, test_varying_feature_with_value_range
 sys.path.append('./')
 from copy import deepcopy
 import pickle

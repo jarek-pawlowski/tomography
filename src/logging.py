@@ -125,7 +125,9 @@ def plot_map_from_files(
     save_path: t.Optional[str] = None,
     values_range: t.Optional[t.Tuple[float, float]] = None,
     style: str = 'seaborn', # 'seaborn' or 'matplotlib'
-    title: str = ''
+    title: str = '',
+    global_ax = None,
+    close: bool = True
 ):
     metrics_values_for_xvalue = []
     for i in range(*range_):
@@ -138,9 +140,9 @@ def plot_map_from_files(
         metrics_values_for_xvalue.append(metric_value)
     metrics_values_for_xvalue = np.array(metrics_values_for_xvalue)
     if style == 'seaborn':
-        plot_error_map_seaborn(metrics_values_for_xvalue, save_path, values_range, title=title)
+        plot_error_map_seaborn(metrics_values_for_xvalue, save_path, values_range, title=title, global_ax=global_ax, close=close)
     elif style == 'matplotlib':
-        plot_error_map(metrics_values_for_xvalue, save_path, values_range, title=title)
+        plot_error_map(metrics_values_for_xvalue, save_path, values_range, title=title, close=close)
     else:
         raise ValueError(f'Unrecognized style: {style}, should be one of: {["seaborn", "matplotlib"]}')
 
@@ -152,13 +154,15 @@ def plot_map_from_file(
     values_range: t.Optional[t.Tuple[float, float]] = None,
     title: str = '',
     style: str = 'seaborn', # 'seaborn' or 'matplotlib'
+    global_ax = None,
+    close: bool = True
 ):
     metrics = load_metrics_from_file(path_to_file)
     metrics_values = metrics[metric_name]
     if style == 'seaborn':
-        plot_error_map_seaborn(metrics_values, save_path, values_range, title=title)
+        plot_error_map_seaborn(metrics_values, save_path, values_range, title=title, global_ax=global_ax, close=close)
     elif style == 'matplotlib':
-        plot_error_map(metrics_values, save_path, values_range, title=title)
+        plot_error_map(metrics_values, save_path, values_range, title=title, close=close)
     else:
         raise ValueError(f'Unrecognized style: {style}, should be one of: {["seaborn", "matplotlib"]}')
 
@@ -232,6 +236,8 @@ def plot_grouped_error_map(
         norm = plt.Normalize()
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 
+    plt.rcParams.update({'font.size': 20})
+
     for i in range(outer_dim):
         inner = gridspec.GridSpecFromSubplotSpec(inner_dim_sqrt, inner_dim_sqrt,
                         subplot_spec=outer[i], wspace=0., hspace=0.01)
@@ -252,7 +258,7 @@ def plot_grouped_error_map(
             if not np.isnan(metric_value):
                 color = cmap(norm(metric_value))
                 ax = plt.subplot(inner[j])
-                ax.text(0, 0, f'{metric_value:.4f}', ha='center', va='center', fontsize=8)
+                ax.text(0, 0, f'{metric_value:.4f}', ha='center', va='center', fontsize=20)
                 ax.imshow([[color]])
                 ax.grid(False)
                 if i== 0 and j == 0:
@@ -270,16 +276,16 @@ def plot_grouped_error_map(
                 fig.add_subplot(ax)
 
     fig.subplots_adjust(wspace=0., hspace=0., top=0.93, bottom=0.28) #right=0.97)
-    fig.supxlabel('m', y = 0.23, fontsize=15)
-    fig.supylabel('m', x = 0.06, fontsize=15)
+    fig.supxlabel('m', y = 0.23, fontsize=20)
+    fig.supylabel('m', x = 0.06, fontsize=20)
 
     cbar_ax = fig.add_axes([0.15, 0.15, 0.7, 0.05])
     fig.colorbar(sm, cax=cbar_ax, orientation='horizontal')
-    cbar_ax.set_xlabel('Complex distance')
+    cbar_ax.set_xlabel('$E_C$')
     plt.suptitle(title, fontsize=20)
     if save_path is not None:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.savefig(save_path, bbox_inches='tight', dpi=1000)
     plt.show()
     if close:
         plt.close()
@@ -290,20 +296,32 @@ def plot_error_map_seaborn(
     save_path: t.Optional[str] = None,
     values_range: t.Optional[t.Tuple[float, float]] = None,
     title: str = '',
-    close: bool = True
+    close: bool = True,
+    global_ax = None,
 ):
+    params = {
+        "annot": True, 
+        "fmt": ".4f", 
+        "linewidth": 3.0, 
+        "annot_kws": {"size":20},
+        "cbar": False,
+        "square": True
+    }
     if values_range is not None:
-        norm = plt.Normalize(vmin=values_range[0], vmax=values_range[1])
-        metrics_values = norm(metrics_values)
-    plt.figure(figsize=(15,12))
+        params['vmin'] = values_range[0]
+        params['vmax'] = values_range[1]
+    if global_ax is None:
+        plt.figure(figsize=(15,12))
     sns.set_theme(font_scale=1.7)
     sns.heatmap(
         metrics_values.reshape((4,4)),
-        annot=True, fmt=".4f", linewidth=6.0
+        **params,
+        ax=global_ax
     )
     plt.title(title, size=22)
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    plt.savefig(save_path, format="png", bbox_inches="tight")
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, format="png", bbox_inches="tight")
     plt.show()
     if close:
         plt.close()

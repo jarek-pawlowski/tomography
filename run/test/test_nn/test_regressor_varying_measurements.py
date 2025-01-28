@@ -49,13 +49,13 @@ criterions = {
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# for i in range(0, model_params['input_dim']):
-#     print('Measurement', i)
-#     test_metrics = test_varying_input(model, device, test_loader, criterions, varying_input_idx=[i], max_variance=1., step=0.05)
-#     for variance, metrics in test_metrics.items():
-#         write_mode = 'w' if variance == 0 else 'a'
-#         log_metrics_to_file(metrics, results_path.format(results_path_prefix,  f'{i}'), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
-#     plot_metrics_from_file(results_path.format(results_path_prefix,  f'{i}'), title=f'Metrics for measurement {i}', save_path=plot_path.format(f'{i}'), xaxis='variance')
+for i in range(0, model_params['input_dim']):
+    print('Measurement', i)
+    test_metrics = test_varying_input(model, device, test_loader, criterions, varying_input_idx=[i], max_variance=1., step=0.05)
+    for variance, metrics in test_metrics.items():
+        write_mode = 'w' if variance == 0 else 'a'
+        log_metrics_to_file(metrics, results_path.format(results_path_prefix,  f'{i}'), write_mode=write_mode, xaxis=variance, xaxis_name='variance')
+    plot_metrics_from_file(results_path.format(results_path_prefix,  f'{i}'), title=f'Metrics for measurement {i}', save_path=plot_path.format(f'{i}'), xaxis='variance')
 
 plot_metrics_from_files(f'{results_path_prefix}', (0, model_params['input_dim']), save_path=plot_path.format(f'_rmse'), xaxis='variance', specified_metric='test_rmse_loss')
 plot_metrics_from_files(f'{results_path_prefix}', (0, model_params['input_dim']), title=f'Clipped RMSE loss for varying measurements', save_path=plot_path.format(f'_rmse_clipped'), xaxis='variance', specified_metric='test_clipped_rmse_loss')

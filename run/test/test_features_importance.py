@@ -1,7 +1,7 @@
 import sys
 
 from src.model_utils import calculate_mean_model_output_with_varied_feature
-from src.test_model import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, test_varying_feature
+from src.test_model import test_output_statistics_for_given_feature, test_output_statistics_varying_feature, test_varying_feature_with_value_range, test_varying_feature_with_noise, calculate_model_mad_varying_feature
 sys.path.append('./')
 from copy import deepcopy
 import pickle
@@ -23,13 +23,13 @@ test_dataset = MeasurementDataset(root_path='./data/val/')
 # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-model_name = 'regressor'
-results_path_prefix = f'./logs/{model_name}_features_importance/real_distribution_range_features_importance_with_varied_input_mean_'
+model_name = 'tomography'
+results_path_prefix = f'./logs/{model_name}_features_importance/real_distribution_noise_features_importance_with_varied_feature_input_mean_'
 results_path = '{}{}.log'
-plot_path = f'./plots/{model_name}_features_importance/real_distribution_range_features_importance_with_varied_input_mean_' + '{}.png'
+plot_path = f'./plots/{model_name}_features_importance/real_distribution_noise_features_importance_with_varied_feature_input_mean_' + '{}.png'
 cov_matrix_path = f'./plots/{model_name}_features_importance/cov_matrix.png'
 model_statistics_path = f'./data/{model_name}_dataset_statistics.pkl'
-model_varied_input_mean_path = f'./data/{model_name}_varied_input_mean.pkl'
+model_varied_input_mean_path = f'./data/{model_name}_varied_input_mean_noise.pkl'
 dataset_statistics_path = './data/dataset_statistics.pkl'
 
 model_path = f'./models/{model_name}.pt'
@@ -44,12 +44,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 if model_name == 'regressor':
     model = Regressor(**model_params)
-    model.load(model_path)
+    model.load(model_path, map_location=device)
     model.eval()
     model.to(device)
 elif model_name == 'classifier':
     model = Classifier(**model_params)
-    model.load(model_path)
+    model.load(model_path, map_location=device)
     model.eval()
     model.to(device)
 else:
@@ -90,13 +90,13 @@ except:
     with open(model_statistics_path, 'wb') as f:
         pickle.dump(model_dataset_statistics, f)
 
-try:
-    with open(model_varied_input_mean_path, 'rb') as f:
-        model_varied_input_mean = pickle.load(f)
-except:
-    model_varied_input_mean = calculate_mean_model_output_with_varied_feature(model, device, test_loader, features_value_range=(0., 1.), step=0.01)
-    with open(model_varied_input_mean_path, 'wb') as f:
-        pickle.dump(model_varied_input_mean, f)
+# try:
+#     with open(model_varied_input_mean_path, 'rb') as f:
+#         model_varied_input_mean = pickle.load(f)
+# except:
+#     model_varied_input_mean = calculate_mean_model_output_with_varied_feature(model, device, test_loader, mode='shift_feature', noise_variance=0.5, num_steps=10)
+#     with open(model_varied_input_mean_path, 'wb') as f:
+#         pickle.dump(model_varied_input_mean, f)
 
 
 print("Dataset statistics:")
@@ -111,21 +111,43 @@ print("Model std:", model_dataset_statistics['std'])
 print("Model max:", model_dataset_statistics['max'])
 print("Model min:", model_dataset_statistics['min'])
 
-print("Model varied input mean:", model_varied_input_mean)
+# print("Model varied input mean:", model_varied_input_mean)
 
-# for i in range(0, model_params['input_dim']):
-#     print('Measurement', i)
-#     min_input_value = dataset_statistics['min'][i].item()
-#     max_input_value = dataset_statistics['max'][i].item()
+for i in range(0, model_params['input_dim']):
+    print('Measurement', i)
+    min_input_value = dataset_statistics['min'][i].item()
+    max_input_value = dataset_statistics['max'][i].item()
 
-#     # dataset_feature_test_metrics = test_output_statistics_for_given_feature(model, device, test_loader, feature_idx=[i], criterions=criterions)
-#     # feature_varying_metrics = test_output_statistics_varying_feature(model, device, feature_idx=[i], criterions=criterions, features_num=16, feature_value_range=(min_input_value, max_input_value), step=0.01, mean=mean, covariance_matrix=covariance_matrix)
-#     dataset_mean_test_metrics, dataset_distance_test_metrics  = test_varying_feature(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_value_range=(min_input_value, max_input_value), step=0.01)
+    # # dataset_feature_test_metrics = test_output_statistics_for_given_feature(model, device, test_loader, feature_idx=[i], criterions=criterions)
+    # # feature_varying_metrics = test_output_statistics_varying_feature(model, device, feature_idx=[i], criterions=criterions, features_num=16, feature_value_range=(min_input_value, max_input_value), step=0.01, mean=mean, covariance_matrix=covariance_matrix)
+    # dataset_mean_test_metrics, dataset_distance_test_metrics  = test_varying_feature_with_value_range(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_value_range=(min_input_value, max_input_value), step=0.01)
+    
+    # model_varied_input_mean = calculate_mean_model_output_with_varied_feature(model, device, test_loader, mode='add_noise', noise_variance=0.5, num_steps=10, specific_feature_idx=i, label_separate_output=True)
+    # print("Model varied input mean:", model_varied_input_mean[0])
+    # print("Model varied input mean for separable states:", model_varied_input_mean[1][0])
+    # print("Model varied input mean for entangled states:", model_varied_input_mean[1][1])
 
-#     write_mode = 'w' if i == 0 else 'a'
-#     log_metrics_to_file(dataset_mean_test_metrics, results_path.format(results_path_prefix,  'mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
-#     log_metrics_to_file(dataset_distance_test_metrics, results_path.format(results_path_prefix,  'distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
-#     # log_metrics_to_file(feature_varying_metrics, results_path.format(results_path_prefix,  'feature_varying'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+    # dataset_mean_test_metrics, dataset_distance_test_metrics, separate_mean_metrics, separate_distance_metrics  = test_varying_feature_with_noise(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_noise_variance=0.5, num_repetitions=10, label_separate_output=True)
+    # dataset_mean_test_metrics, dataset_distance_test_metrics  = test_varying_feature_with_noise(model, device, test_loader, criterions, feature_idx=[i], model_output_mean=model_varied_input_mean, feature_noise_variance=0.5, num_repetitions=10, label_separate_output=False)
+
+    mad_0 = calculate_model_mad_varying_feature(model, device, test_loader, feature_idx=[i], feature_noise_variance=0.5, num_repetitions=10, substract_mean=0.)
+    mad_1 = calculate_model_mad_varying_feature(model, device, test_loader, feature_idx=[i], feature_noise_variance=0.5, num_repetitions=10, substract_mean=mad_0)
+    metrics = {
+        'mean_mad': mad_0,
+        'mad_mad': mad_1
+    }
+
+    write_mode = 'w' if i == 0 else 'a'
+    log_metrics_to_file(metrics, results_path.format(results_path_prefix,  'mad'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+
+    # log_metrics_to_file(dataset_mean_test_metrics, results_path.format(results_path_prefix,  'mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')       
+    # log_metrics_to_file(separate_mean_metrics[0], results_path.format(results_path_prefix,  'separable_mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+    # log_metrics_to_file(separate_mean_metrics[1], results_path.format(results_path_prefix,  'entangled_mean_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
+
+    # log_metrics_to_file(dataset_distance_test_metrics, results_path.format(results_path_prefix,  'distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')        
+    # log_metrics_to_file(separate_distance_metrics[0], results_path.format(results_path_prefix,  'separable_distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+    # log_metrics_to_file(separate_distance_metrics[1], results_path.format(results_path_prefix,  'entangled_distance_dataset_values'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
+    # log_metrics_to_file(feature_varying_metrics, results_path.format(results_path_prefix,  'feature_varying'), write_mode=write_mode, xaxis=i, xaxis_name='measurement_idx')
 
 # # plot_metrics_from_file(results_path.format(results_path_prefix,  'dataset'), title=f'Metrics for all measurements', save_path=plot_path.format(f'dataset'), xaxis='measurement_idx', linestyle='-', marker='x')
 # plot_metrics_from_file(results_path.format(results_path_prefix,  'mean_dataset_values'), title=f'Metrics for all measurements', save_path=plot_path.format(f'mean_dataset_values'), xaxis='measurement_idx', linestyle='-', marker='x')

@@ -213,7 +213,10 @@ def train_tomography_corrections_predictor(
     criterion: t.Callable = nn.MSELoss(),
     measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
     model_input_info: str = 'full', # 'full', 'measurement' or 'measurement_basis'
-    std_out: t.Optional[t.IO] = None
+    std_out: t.Optional[t.IO] = None,
+    use_only_regularization: bool = False,
+    regularization_weight: float = 0.1,
+    use_m2_corrections: bool = False
 ) -> t.Dict[str, t.List[float]]:
 
     model.train()
@@ -255,8 +258,14 @@ def train_tomography_corrections_predictor(
             measurement_predictor_input = basis_as_vector
         else:
             raise ValueError(f'Unknown model_input_info: {model_input_info}')
-        inverse_corrections, r_corrections = model(measurement_predictor_input)
-        loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections)
+        
+        if use_m2_corrections:
+            m2_corrections, inverse_corrections, r_corrections = model(measurement_predictor_input)
+            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, use_only_regularization, regularization_weight, m2_corrections)
+        else:
+            inverse_corrections, r_corrections = model(measurement_predictor_input)
+            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, use_only_regularization, regularization_weight)
+        
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
@@ -274,11 +283,20 @@ def corrections_loss(
     measurement: torch.Tensor,
     inverse_corrections: torch.Tensor,
     r_corrections: torch.Tensor,
+    use_only_regularization: bool = False,
+    regularization_weight: float = 0.1,
+    m2_corrections: t.Optional[torch.Tensor] = None
 ):
     complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
     complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
-    reconstructed_rho = reconstruct_rho_from_corrections(selected_projection_vectors, gammas, measurement, complex_inverse_corrections, complex_r_corrections)
-    reconstruction_loss = criterion(reconstructed_rho, rho)
+    complex_m2_corrections = torch.complex(m2_corrections[:, 0], m2_corrections[:, 1]) if m2_corrections is not None else None
+    
+    loss = 0.
+    if not use_only_regularization:
+        reconstructed_rho = reconstruct_rho_from_corrections(selected_projection_vectors, gammas, measurement, complex_inverse_corrections, complex_r_corrections, complex_m2_corrections)
+        reconstruction_loss = criterion(reconstructed_rho, rho)
+        loss = loss + reconstruction_loss
+
     B = calculate_B(selected_projection_vectors, gammas).to(rho.device)
     total_corrections = torch.stack([
         torch.matmul(B, (torch.matmul(inverse_correction_i.T, measurement_i.to(torch.complex64)) + r_correction_i))
@@ -286,7 +304,7 @@ def corrections_loss(
     ])
     total_corrections = torch.stack([total_corrections.real, total_corrections.imag], dim=1)
     corrections_regularization_loss = torch.nn.functional.mse_loss(total_corrections, torch.zeros_like(total_corrections))
-    loss = reconstruction_loss + 0.1*corrections_regularization_loss
+    loss = loss + regularization_weight*corrections_regularization_loss
     return loss
 
 
@@ -316,10 +334,17 @@ def corrections_loss_with_dynamic_selection(
     return loss
 
 
-def reconstruct_rho_from_corrections(selected_projection_vectors: torch.Tensor, gammas: torch.Tensor, measurement: torch.Tensor, complex_inverse_corrections: torch.Tensor, complex_r_corrections: torch.Tensor):
+def reconstruct_rho_from_corrections(selected_projection_vectors: torch.Tensor, gammas: torch.Tensor, measurement: torch.Tensor, complex_inverse_corrections: torch.Tensor, complex_r_corrections: torch.Tensor, complex_m2_corrections: t.Optional[torch.Tensor] = None):
     reconstructed_rho = torch.stack([
-            reconstruct_with_nn_corrections(measurement_i, selected_projection_vectors, gammas, inverse_correction_i, r_correction_i)
-            for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+            reconstruct_with_nn_corrections(
+                measurement_i,
+                selected_projection_vectors,
+                gammas,
+                inverse_correction_i,
+                r_correction_i,
+                complex_m2_corrections[i] if complex_m2_corrections is not None else None
+            )
+            for i, (measurement_i, inverse_correction_i, r_correction_i) in enumerate(zip(measurement, complex_inverse_corrections, complex_r_corrections))
         ])
     reconstructed_rho = torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=1)
     return reconstructed_rho
@@ -355,7 +380,8 @@ def train_discrete_measurement_selector(
     num_reconstructor_repeats: int = 1,
     num_selector_repeats: int = 1,
     mode: str = 'rho', # 'rho' or 'concurrence'
-    num_noisy_epochs: int = 10
+    num_noisy_epochs: int = 10,
+    selector_train_mode: str = 'stepwise' # 'stepwise' or 'ordered'
 ) -> t.Dict[str, t.List[float]]:
 
     model.train()
@@ -391,44 +417,64 @@ def train_discrete_measurement_selector(
 
         for _ in range(num_selector_repeats):
             selector_optimizer.zero_grad()
-            _, predicted_bases_probabilities, predicted_all_targets = model(measurement_with_basis, rho)
+            predicted_targets, predicted_bases_probabilities, predicted_all_targets = model(measurement_with_basis, rho)
             selector_loss = torch.zeros(1).to(device)
-            for i in range(1, predicted_bases_probabilities.shape[1]):
+
+            all_reconstruction_losses = []
+            probs = []
+            for i in range(predicted_bases_probabilities.shape[1]):
                 probabilites = reduce(torch.func.vmap(torch.kron), [predicted_bases_probabilities[:, i, j] for j in range(predicted_bases_probabilities.shape[2])])
-                if mode == 'tomo_corrections':
-                    selected_projection_vectors_ids = torch.argsort(probabilites, dim=1, descending=True)[:, :i+1]
-                    selected_projection_vectors = n_qubits_projection_vectors[selected_projection_vectors_ids]
-                    selected_measurements = torch.stack([m[selected_projection_vectors_ids[i]] for i, m in enumerate(measurement)])
-                    inverse_corrections, r_corrections = predicted_all_targets[:, :i+1, 1:, :, 0], predicted_all_targets[:, i, 1:, :, 1] # skipping the first basis as it is always chosen as the first measurement
-                    inverse_corrections = torch.moveaxis(inverse_corrections, 1, -2)
-                    complex_inverse_corrections = torch.complex(inverse_corrections[:, :, 0], inverse_corrections[:, :, 1])
-                    complex_r_corrections = torch.complex(r_corrections[:, :, 0], r_corrections[:, :, 1])
-                    reconstructed_rhos = torch.stack([
-                        reconstruct_rho_from_corrections_dynamic_selection(selected_projection_vectors, gammas, selected_measurements, complex_inverse_corrections[:, k], complex_r_corrections[:, k])
-                        for k in range(complex_inverse_corrections.shape[1])
-                    ], dim=1).to(device)
-                    target_broadcasted = target.unsqueeze(1).expand(-1, predicted_all_targets.shape[2] - 1, *target.shape[1:])
-                    reconstruction_losses = torch.nn.functional.mse_loss(reconstructed_rhos, target_broadcasted, reduction='none')
-                    reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
-                else:
-                    reconstruction_losses = torch.nn.functional.mse_loss(
-                        predicted_all_targets[:, i, 1:],  # skipping the first basis as it is always chosen as the first measurement
-                        target.unsqueeze(1).expand(-1, predicted_all_targets.shape[2] - 1, *target.shape[1:]),
-                        reduction='none'
-                    )
-                    if mode == 'rho':
+                if selector_train_mode == 'stepwise' and i > 0:
+                    if mode == 'tomo_corrections':
+                        selected_projection_vectors_ids = torch.argsort(probabilites, dim=1, descending=True)[:, :i+1]
+                        selected_projection_vectors = n_qubits_projection_vectors[selected_projection_vectors_ids]
+                        selected_measurements = torch.stack([m[selected_projection_vectors_ids[i]] for i, m in enumerate(measurement)])
+                        inverse_corrections, r_corrections = predicted_all_targets[:, :i+1, 1:, :, 0], predicted_all_targets[:, i, 1:, :, 1] # skipping the first basis as it is always chosen as the first measurement
+                        inverse_corrections = torch.moveaxis(inverse_corrections, 1, -2)
+                        complex_inverse_corrections = torch.complex(inverse_corrections[:, :, 0], inverse_corrections[:, :, 1])
+                        complex_r_corrections = torch.complex(r_corrections[:, :, 0], r_corrections[:, :, 1])
+                        reconstructed_rhos = torch.stack([
+                            reconstruct_rho_from_corrections_dynamic_selection(selected_projection_vectors, gammas, selected_measurements, complex_inverse_corrections[:, k], complex_r_corrections[:, k])
+                            for k in range(complex_inverse_corrections.shape[1])
+                        ], dim=1).to(device)
+                        target_broadcasted = target.unsqueeze(1).expand(-1, predicted_all_targets.shape[2] - 1, *target.shape[1:])
+                        reconstruction_losses = torch.nn.functional.mse_loss(reconstructed_rhos, target_broadcasted, reduction='none')
                         reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
-                    elif mode == 'concurrence':
-                        reconstruction_losses = reconstruction_losses.squeeze(-1)
+                    else:
+                            reconstruction_losses = torch.nn.functional.mse_loss(
+                                predicted_all_targets[:, i, 1:],  # skipping the first basis as it is always chosen as the first measurement
+                                target.unsqueeze(1).expand(-1, predicted_all_targets.shape[2] - 1, *target.shape[1:]),
+                                reduction='none'
+                            )
+                            if mode == 'rho':
+                                reconstruction_losses = reconstruction_losses.mean(dim=(-1, -2, -3))
+                            elif mode == 'concurrence':
+                                reconstruction_losses = reconstruction_losses.squeeze(-1)
 
-                if epoch < num_noisy_epochs:
-                    mean_reconstruction_losses_with_noise = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
-                else:
-                    mean_reconstruction_losses_with_noise = reconstruction_losses
+                    if epoch < num_noisy_epochs:
+                        mean_reconstruction_losses_with_noise = reconstruction_losses + torch.randn_like(reconstruction_losses) * 1e-3
+                    else:
+                        mean_reconstruction_losses_with_noise = reconstruction_losses
 
-                best_measurement_ids = torch.argmin(mean_reconstruction_losses_with_noise, dim=1).detach() + 1  # shifting by 1 as the first measurement is skipped
-                selector_loss_i = selector_criterion(input=probabilites, target=best_measurement_ids)
-                selector_loss += selector_loss_i
+                    best_measurement_ids = torch.argmin(mean_reconstruction_losses_with_noise, dim=1).detach() + 1  # shifting by 1 as the first measurement is skipped
+                    selector_loss_i = selector_criterion(input=probabilites, target=best_measurement_ids)
+                    selector_loss += selector_loss_i
+
+                elif selector_train_mode == 'ordered':
+                    assert mode == 'rho', 'Ordered selector training mode is only supported for rho mode'
+
+                    reconstruction_loss = torch.nn.functional.mse_loss(predicted_targets[:, i], target, reduction='none').mean(dim=(-1, -2, -3))
+                    all_reconstruction_losses.append(reconstruction_loss)
+                    probs.append(probabilites)
+
+            if selector_train_mode == 'ordered':
+                probs = torch.stack(probs, dim=1)[:, 1:]
+                all_reconstruction_losses = torch.stack(all_reconstruction_losses, dim=1)
+                losses_diffs = all_reconstruction_losses[:, :-1] - all_reconstruction_losses[:, 1:]
+                measure_id_sorted_diffs = torch.argsort(losses_diffs, dim=1, descending=True)
+                proposed_ids =_get_proposed_ids_from_probabilities(probs)
+                target_measure_ids = torch.stack([proposed_ids[idx, measure_id_sorted_diffs[idx]] for idx in range(proposed_ids.shape[0])], dim=0)
+                selector_loss = selector_criterion(input=probs.moveaxis(-1, 1), target=target_measure_ids.detach())
 
             selector_loss.backward()
             selector_optimizer.step()
@@ -457,9 +503,26 @@ def train_discrete_measurement_selector(
 
         if batch_idx % log_interval == 0:
             pbar.set_postfix({'reconstructor_loss': reconstructor_loss.item(), 'selector_loss': selector_loss.item()})
+            print(f'Reconstructor loss: {reconstructor_loss.item()}, Selector loss: {selector_loss.item()}')
     metrics['reconstructor_train_loss'] /= num_reconstructor_repeats * len(train_loader)
     metrics['selector_train_loss'] /= num_selector_repeats * len(train_loader)
     return metrics
+
+
+def _get_proposed_ids_from_probabilities(probs: torch.Tensor) -> torch.Tensor:
+    sorted_measure_ids = probs.argsort(descending=True)
+    chosen_ids = [[measure_id_i[0, 0]] for measure_id_i in sorted_measure_ids]
+    for i, measure_id_i in enumerate(sorted_measure_ids):
+        for j, measure_id_ij in enumerate(measure_id_i):
+            if j == 0:
+                continue
+            for measure_id_k in measure_id_ij:
+                if measure_id_k not in chosen_ids[i]:
+                    chosen_ids[i].append(measure_id_k)
+                    break
+    return torch.stack([
+        torch.stack(ids) for ids in chosen_ids
+    ])
 
 
 
@@ -518,7 +581,7 @@ def train_optimized_discrete_measurement_selector(
 
         for _ in range(num_reconstructor_repeats):
             reconstructor_optimizer.zero_grad()
-            predicted_best_targets, predicted_bases_probabilities, _ = model(measurement_with_basis, rho)
+            predicted_best_targets, _, _ = model(measurement_with_basis, rho)
             reconstructor_loss = torch.zeros(1).to(device)
             for i in range(predicted_best_targets.shape[1]):
                 reconstructor_loss += reconstructor_criterion(predicted_best_targets[:, i], target)
@@ -527,8 +590,10 @@ def train_optimized_discrete_measurement_selector(
             reconstructor_optimizer.step()
             metrics['reconstructor_train_loss'] += reconstructor_loss.item()
 
+
         if batch_idx % log_interval == 0:
             pbar.set_postfix({'reconstructor_loss': reconstructor_loss.item(), 'selector_loss': selector_loss.item()})
+            print(f'Reconstructor loss: {reconstructor_loss.item()}, Selector loss: {selector_loss.item()}')
     metrics['reconstructor_train_loss'] /= num_reconstructor_repeats * len(train_loader)
     metrics['selector_train_loss'] /= num_selector_repeats * len(train_loader)
     return metrics

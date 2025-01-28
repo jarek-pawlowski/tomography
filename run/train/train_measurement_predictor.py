@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorBasedOnReconstructedMatrix, LSTMAttentionMeasurementPredictor
+from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
+from src.model import SequentialMeasurementPredictor, RecurrentMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorNoSelectionMeausrements, LSTMMeasurementPredictorStackedInput, LSTMMeasurementPredictorBasedOnReconstructedMatrix, LSTMAttentionMeasurementPredictor
 from src.criterions import bases_loss, contrastive_bases_loss, contrastive_bases_trace_norm_loss
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
@@ -23,11 +23,13 @@ def main():
     batch_size = 64
     train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
     test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    # train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
+    # test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis_contrastive_bases_trace_norm0_01_ep4'
+    model_name = 'full_lstm_measure_basis_stacked_input_no_bases_loss'
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -39,11 +41,13 @@ def main():
     model_params = {
         'num_qubits': num_qubits,
         'layers': 6,
-        'hidden_size': 256,
+        'hidden_size': 1024,
         'max_num_measurements': 4**num_qubits,
     }
-    model = LSTMMeasurementPredictor(**model_params)
+    # model = LSTMMeasurementPredictor(**model_params)
+    # model = LSTMMeasurementPredictorNoSelectionMeausrements(**model_params)
     # model = LSTMAttentionMeasurementPredictor(**model_params)
+    model = LSTMMeasurementPredictorStackedInput(**model_params)
 
     # train & test model
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
@@ -59,7 +63,7 @@ def main():
     best_test_loss = float('inf')
     last_measurement_idx = 4**num_qubits - 1
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, increase_loss_weights_with_measurement=False, add_noise_to_measurement_basis=False, bases_loss_fn=contrastive_bases_trace_norm_loss, bases_loss_weight=0.001, contrastive_loss_start_epoch=4)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, increase_loss_weights_with_measurement=False, add_noise_to_measurement_basis=False) #, bases_loss_fn=contrastive_bases_trace_norm_loss, bases_loss_weight=0.001, contrastive_loss_start_epoch=4)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss'][f'measurement {last_measurement_idx}'] < best_test_loss:
             best_test_loss = test_metrics['test_loss'][f'measurement {last_measurement_idx}']

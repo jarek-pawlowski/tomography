@@ -14,25 +14,31 @@ from src.model import Regressor, Classifier
 from src.test_model import test
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
+def list_to_str(l):
+    return '_'.join(map(str, l))
 
-def main():
+
+def main(measurement_subset):
     # load data
     batch_size = 512
-    train_dataset = MeasurementDataset(root_path='./data/train/', measurement_subset=[0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15])
-    test_dataset = MeasurementDataset(root_path='./data/val/', measurement_subset=[0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15])
+    train_dataset = MeasurementDataset(root_path='./data/train/', measurement_subset=measurement_subset)
+    test_dataset = MeasurementDataset(root_path='./data/val/', measurement_subset=measurement_subset)
     # train_dataset = VectorDensityMatrixDataset(root_path='./data/train/')
     # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    model_name = 'regressor_m0_1_2_3_4_5_6_7_10_11_14_15'
+    if measurement_subset is None:
+        model_name = 'regressor'
+    else:
+        model_name = f'regressor_m{list_to_str(measurement_subset)}'
 
     # create model
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
-    'input_dim': 12,
+    'input_dim': 16 if measurement_subset is None else len(measurement_subset),
     'output_dim': 1,
     'layers': 2,
     'hidden_size': 128,
@@ -67,4 +73,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for measurement in range(16):
+        main(measurement_subset=[measurement])

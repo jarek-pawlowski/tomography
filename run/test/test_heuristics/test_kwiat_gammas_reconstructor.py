@@ -65,16 +65,16 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
 
 if __name__ == '__main__':
     num_repetitions = 10
-    min_num_measurements = 17
-    max_num_measurements = 64
-    num_qubits = 3
+    min_num_measurements = 2
+    max_num_measurements = 4
+    num_qubits = 1
     inverse = 'pinv'
     enforce_valid_density_matrix = False
-    dir_name = f'./logs/3qbit/density_matrix_reconstructor_from_pinv_gammas/'
-    log_path = f'./logs/3qbit/density_matrix_reconstructor_from_pinv_gammas.log'
+    dir_name = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_no_enforcement2/'
+    log_path = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_no_enforcement2.log'
 
     batch_size = 64
-    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     for num_measurements in range(min_num_measurements, max_num_measurements + 1):

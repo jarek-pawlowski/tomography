@@ -17,6 +17,53 @@ def regressor_accuracy(
     return accuracy
 
 
+def regressor_balanced_accuracy(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    input_threshold: float = 0.5,
+    target_threshold: float = 0.5,
+    reduction: str = 'mean'
+) -> torch.Tensor:
+    prediction = (input > input_threshold).float()
+    target = (target > target_threshold).float()
+    true_positive = (prediction * target).sum()
+    false_positive = (prediction * (1 - target)).sum()
+    true_negative = ((1 - prediction) * (1 - target)).sum()
+    false_negative = ((1 - prediction) * target).sum()
+    balanced_accuracy = 0.5 * (true_positive / (true_positive + false_negative) + true_negative / (true_negative + false_positive))
+    if reduction == 'mean':
+        return balanced_accuracy.mean()
+    return balanced_accuracy
+
+
+def regressor_precision(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    input_threshold: float = 0.5,
+    target_threshold: float = 0.5,
+) -> torch.Tensor:
+    prediction = (input > input_threshold).float()
+    target = (target > target_threshold).float()
+    true_positive = (prediction * target).sum()
+    false_positive = (prediction * (1 - target)).sum()
+    precision = true_positive / (true_positive + false_positive)
+    return precision
+
+
+def regressor_recall(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    input_threshold: float = 0.5,
+    target_threshold: float = 0.5,
+) -> torch.Tensor:
+    prediction = (input > input_threshold).float()
+    target = (target > target_threshold).float()
+    true_positive = (prediction * target).sum()
+    false_negative = ((1 - prediction) * target).sum()
+    recall = true_positive / (true_positive + false_negative)
+    return recall
+
+
 def reduced_input_criterion(
     input: torch.Tensor,
     target: torch.Tensor,

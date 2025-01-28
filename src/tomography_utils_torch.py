@@ -41,7 +41,7 @@ def measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, ...]) -> tor
     return prob
 
 
-def calculate_concurrence_from_measurements(measurements_data: torch.Tensor) -> torch.Tensor:
+def calculate_concurrence_from_measurements(measurements_data: t.Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
     num_qubits = 2 # tested for 2 qubits
     dim = 2**num_qubits
     tomography = Tomography(num_qubits, Kwiat_projectors)
@@ -49,7 +49,12 @@ def calculate_concurrence_from_measurements(measurements_data: torch.Tensor) -> 
 
     predictions = []
     for measurements in measurements_data:
-        rho_rec = tomography.reconstruct(measurements.cpu().numpy(), enforce_positiv_sem=True)
+        if isinstance(measurements, np.ndarray):
+            rho_rec = tomography.reconstruct(measurements, enforce_positiv_sem=True)
+        elif isinstance(measurements, torch.Tensor):
+            rho_rec = tomography.reconstruct(measurements.cpu().numpy(), enforce_positiv_sem=True)
+        else:
+            raise ValueError('measurements must be numpy array or torch tensor')
         rho_rec = rho_rec.reshape((dim, dim))
         rho_rec = rho_rec / np.trace(rho_rec)
         density_matrix = DensityMatrix(rho_rec)
@@ -58,6 +63,9 @@ def calculate_concurrence_from_measurements(measurements_data: torch.Tensor) -> 
         except:
             conc = -1
         predictions.append(conc)
+    if isinstance(measurements_data, np.ndarray):
+        predictions = np.array(predictions)
+        return predictions
     predictions = torch.tensor(predictions).unsqueeze(-1)
     return predictions.to(measurements_data.device)
 
@@ -109,12 +117,14 @@ def reconstruct_with_nn_corrections(
     projection_vectors: torch.Tensor,
     gammas: torch.Tensor,
     inverse_correction: torch.Tensor,
-    r_correction: torch.Tensor
+    r_correction: torch.Tensor,
+    m2_corrections: t.Optional[torch.Tensor] = None
 ):
     ''' 
     assumes:
         inverse_correction is a tensor of shape (num_measurements, num_gammas)
         r_correction is a tensor of shape (num_gammas)
+        m2_corrections is a tensor of shape (num_measurements, num_measurements)
     '''
     with torch.no_grad():
         B = calculate_B(projection_vectors, gammas)
@@ -122,6 +132,11 @@ def reconstruct_with_nn_corrections(
 
     B_inv = B_inv.detach().to(inverse_correction.device) + inverse_correction.T
     r = torch.matmul(B_inv, measurements.to(torch.complex64)) + r_correction
+
+    if m2_corrections is not None:
+        m2 = torch.prod(torch.combinations(measurements, 2, with_replacement=True), dim=-1).to(torch.complex64)
+        r = r + m2 @ m2_corrections
+
     rho = tensordot(gammas, r, indices=([0], [0]))
     return rho
 

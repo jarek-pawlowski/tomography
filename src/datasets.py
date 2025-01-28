@@ -117,10 +117,11 @@ class MeasurementDataset(DensityMatrixDataset):
 
 
 class DerandomizedTestMeasurementDataset(Dataset):
-    def __init__(self, root_path: str) -> None:
+    def __init__(self, root_path: str, mock_label: bool = False) -> None:
         self.root_dir = root_path
         self.file_names = sorted(os.listdir(root_path))
         self.measurement = Measurement(Kwiat, 2)
+        self.mock_label = mock_label
 
     def __len__(self) -> int:
         return len(self.file_names)
@@ -132,6 +133,8 @@ class DerandomizedTestMeasurementDataset(Dataset):
         matrix = matrix.reshape((2, 2, 2, 2))
         measurements = self._get_all_measurements(matrix)
         tensor = torch.from_numpy(measurements).float()
+        if self.mock_label:
+            return (rho, tensor, 0.)
         return (rho, tensor)
 
     def read_matrix(self, filename):
