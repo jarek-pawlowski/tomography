@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
-from src.model import SequentialMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorNoSelectionMeausrements
+from src.model import LSTMMeasurementPredictorStackedInput, SequentialMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorNoSelectionMeausrements
 from src.criterions import torch_bures_distance
 from src.logging import log_metrics_to_file, plot_metrics_from_file
 
@@ -26,25 +26,28 @@ def semidefinite_percentage(predicted_rho: torch.Tensor, target_rho: torch.Tenso
 
 def main():
     # load data
-    num_qubits = 2
+    num_qubits = 3
     batch_size = 128
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_measure_basis'
-    model_save_path = f'./models/{model_name}.pt'
+    # model_name = 'full_lstm_measure_basis'
+    model_name = 'full_lstm_measure_basis_stacked_input+hs256_no_bases_loss'
+
+    model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     # model_save_path = f'./models/{model_name}.pt'
 
     model_params = {
         'num_qubits': num_qubits,
         'layers': 6,
-        'hidden_size': 128,
+        'hidden_size': 256, # 128
         'max_num_measurements': 4**num_qubits
     }
     # model = SequentialMeasurementPredictor(**model_params)
-    model = LSTMMeasurementPredictor(**model_params)
+    # model = LSTMMeasurementPredictor(**model_params)
     # model = LSTMMeasurementPredictorNoSelectionMeausrements(**model_params)
+    model = LSTMMeasurementPredictorStackedInput(**model_params)
     model.load(model_save_path, map_location=torch.device('cpu'))
 
     # train & test model
