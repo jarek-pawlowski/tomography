@@ -21,23 +21,45 @@ def test(
     model: nn.Module,
     device: torch.device,
     test_loader: DataLoader,
-    criterions: t.Dict[str, t.Callable],
+    criterions: t.Dict[str, t.Callable] = {},
+    binlike_criterions: t.Dict[str, t.Callable] = {},
+    num_bins: t.Optional[int] = None
 ) -> t.Dict[str, t.List[float]]:
 
     model.eval()
     model.to(device)
 
     metrics = {name: 0 for name in criterions.keys()}
+    binlike_metrics = {name: {i: [] for i in range(num_bins)} for name in binlike_criterions.keys()}
+
     with torch.no_grad():
         for data, target in tqdm(test_loader, desc='Testing model...'):
             data, target = data.to(device), target.to(device)
             output = model(data)
             for name, criterion in criterions.items():
                 metrics[name] += criterion(output, target).item()
+            for name, criterion in binlike_criterions.items():
+                criterion_metrics = criterion(output, target)
+                for bin_idx, metric_value in criterion_metrics.items():
+                    binlike_metrics[name][bin_idx].append(metric_value)
+
     for name in metrics.keys():
         metrics[name] /= len(test_loader)
         print(f'{name}: {metrics[name]:.4f}')
-    return metrics
+
+    for name in binlike_metrics.keys():
+        keys_to_remove = []
+        for bin_idx in binlike_metrics[name].keys():
+            if len(binlike_metrics[name][bin_idx]) == 0:
+                keys_to_remove.append(bin_idx)
+                continue
+            binlike_metrics[name][bin_idx] = torch.mean(torch.stack(binlike_metrics[name][bin_idx])).item()
+            print(f'{name} - bin {bin_idx}: {binlike_metrics[name][bin_idx]:.4f}')
+        for key in keys_to_remove:
+            binlike_metrics[name].pop(key)
+    
+    return {**metrics, **binlike_metrics}
+
 
 
 def test_measurement_predictor(
@@ -254,6 +276,65 @@ def test_tomography_corrections_predictor(
             print(f'{name}: {metrics[name]:.4f}', file=std_out)
         except:
             pass
+    return metrics
+
+
+def test_measurement_projector_predictor(
+    model: nn.Module,
+    device: torch.device,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    max_num_measurements: int = 16,
+) -> t.Dict[str, t.List[float]]:
+    
+    model.eval()
+    model.to(device)
+
+    num_qubits = test_loader.dataset.num_qubits
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
+    
+    metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
+    with torch.no_grad():
+        for rho, measurement, concurrence in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            target = rho.to(device)
+
+            projector = torch.from_numpy(Kwiat_projectors.basis[0]).to(device).to(torch.complex64).squeeze(-1)
+            projector = projector.unsqueeze(0).expand(rho.shape[0], -1)
+            measurement_with_projector = (measurement[:, 0:1], torch.stack([projector]*model.num_qubits, dim=1))
+            predicted_projectors, predicted_measurements = model(measurement_with_projector, rho)
+
+            n_qubits_projection_vectors = torch.stack([
+                reduce(torch.vmap(torch.kron), [predicted_projectors[:, i, j] for j in range(predicted_projectors.shape[2])])
+                for i in range(predicted_projectors.shape[1])
+            ], dim=1)
+
+            batch_target = []
+            for k in range(n_qubits_projection_vectors.shape[0]):
+                predicted_target = torch.stack(
+                    [
+                        reconstruct(
+                            predicted_measurements[k, :i],
+                            n_qubits_projection_vectors[k, :i].unsqueeze(-1),
+                            gammas,
+                            enforce_valid_density_matrix=False,
+                            inverse="pinv"
+                        )
+                        for i in range(1, n_qubits_projection_vectors.shape[1] + 1)
+                    ],
+                    dim=0
+                )
+                predicted_target = torch.stack([predicted_target.real, predicted_target.imag], dim=1)
+                batch_target.append(predicted_target)
+            predicted_target = torch.stack(batch_target)
+
+            for name, criterion in criterions.items():
+                for i in range(predicted_target.shape[1]):
+                    metrics[name][f'measurement {i}'] += criterion(predicted_target[:, i], target).item()
+    for name in metrics.keys():
+        for i in range(max_num_measurements):
+            metrics[name][f'measurement {i}'] /= len(test_loader)
+            print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
     return metrics
 
 

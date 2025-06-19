@@ -367,6 +367,76 @@ def reconstruct_rho_from_corrections_and_B_inv(B_inv: torch.Tensor, gammas: torc
     return reconstructed_rho
 
 
+def train_measurement_projector_predictor(
+    model: nn.Module,
+    device: torch.device,
+    train_loader: DataLoader,
+    optimizer: Optimizer,
+    epoch: int,
+    log_interval: int = 100,
+    criterion: t.Callable = nn.MSELoss(),
+    increase_loss_weights_with_measurement: bool = False,
+) -> t.Dict[str, t.List[float]]:
+
+    model.train()
+    model.to(device)
+    metrics = {'train_loss': 0, 'bases_loss': 0}
+
+    num_qubits = train_loader.dataset.num_qubits
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
+
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    for batch_idx, (rho, measurement, concurrence) in pbar:
+        rho, measurement = rho.to(device), measurement.to(device)
+        target = rho.to(device)
+
+        optimizer.zero_grad()
+        projector = torch.from_numpy(Kwiat_projectors.basis[0]).to(device).to(torch.complex64).squeeze(-1)
+        projector = projector.unsqueeze(0).expand(rho.shape[0], -1)
+        measurement_with_projector = (measurement[:, 0:1], torch.stack([projector]*model.num_qubits, dim=1))
+        predicted_projectors, predicted_measurements = model(measurement_with_projector, rho)
+
+        n_qubits_projection_vectors = torch.stack([
+            reduce(torch.vmap(torch.kron), [predicted_projectors[:, i, j] for j in range(predicted_projectors.shape[2])])
+            for i in range(predicted_projectors.shape[1])
+        ], dim=1)
+
+        batch_target = []
+        for k in range(n_qubits_projection_vectors.shape[0]):
+            predicted_target = torch.stack(
+                [
+                    reconstruct(
+                        predicted_measurements[k, :i],
+                        n_qubits_projection_vectors[k, :i].unsqueeze(-1),
+                        gammas,
+                        enforce_valid_density_matrix=False,
+                        inverse="pinv"
+                    )
+                    for i in range(1, n_qubits_projection_vectors.shape[1] + 1)
+                ],
+                dim=0
+            )
+            predicted_target = torch.stack([predicted_target.real, predicted_target.imag], dim=1)
+            batch_target.append(predicted_target)
+        predicted_target = torch.stack(batch_target)
+
+        loss = torch.zeros(1).to(device)
+        for i in range(predicted_target.shape[1]):
+            loss_weight_i = 1
+            if increase_loss_weights_with_measurement:
+                loss_weight_i = (i + 1) # / (predicted_target.shape[1] * (predicted_target.shape[1] + 1) / 2)
+            loss += criterion(predicted_target[:, i], target) * loss_weight_i
+    
+        loss.backward()
+        optimizer.step()
+        metrics['train_loss'] += loss.item()
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'loss': loss.item()})
+    metrics['train_loss'] /= len(train_loader)
+    metrics['bases_loss'] /= len(train_loader)
+    return metrics
+
+
 def train_discrete_measurement_selector(
     model: nn.Module,
     device: torch.device,

@@ -21,11 +21,11 @@ def log_metrics_to_file(metrics: t.Dict[str, float], log_path: str, write_mode: 
         f.write(f'{prefix}{str.join(DELIMITER, metrics_values_str)}\n')
 
 
-def load_metrics_from_file(log_path: str, metrics_names: t.Optional[t.List[str]] = None) -> t.Dict[str, np.ndarray]:
+def load_metrics_from_file(log_path: str, metrics_names: t.Optional[t.List[str]] = None, delimiter: str = DELIMITER) -> t.Dict[str, np.ndarray]:
     values_start_row = 0
     with open(log_path, 'r') as f:
         data = f.readlines()
-    data = [x.strip().split(DELIMITER) for x in data]
+    data = [x.strip().split(delimiter) for x in data]
     if metrics_names is None:
         metrics_names = data[0]
         values_start_row = 1
@@ -33,10 +33,13 @@ def load_metrics_from_file(log_path: str, metrics_names: t.Optional[t.List[str]]
     return {name: values[:, i] for i, name in enumerate(metrics_names)}
 
 
-def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', **kwargs: t.Dict[str, t.Any]) -> None:
+def plot_metrics_from_file(log_path: str, title: str = '', save_path: t.Optional[str] = None, xaxis: str = 'epoch', metrics_names: t.Optional[t.List[str]] = None, **kwargs: t.Dict[str, t.Any]) -> None:
     metrics = load_metrics_from_file(log_path)
     epochs = metrics.pop(xaxis)
-    for metric_name, metric_value in metrics.items():
+    if metrics_names is None:
+        metrics_names = metrics.keys()
+    for metric_name in metrics_names:
+        metric_value = metrics[metric_name]
         plt.plot(epochs, metric_value, label=metric_name, **kwargs)
     plt.title(title)
     plt.xlabel(xaxis)
@@ -300,7 +303,7 @@ def plot_error_map_seaborn(
     global_ax = None,
 ):
     params = {
-        "annot": True, 
+        "annot": metrics_values.reshape((4,4)), 
         "fmt": ".4f", 
         "linewidth": 3.0, 
         "annot_kws": {"size":20},
@@ -314,7 +317,7 @@ def plot_error_map_seaborn(
         plt.figure(figsize=(15,12))
     sns.set_theme(font_scale=1.7)
     sns.heatmap(
-        metrics_values.reshape((4,4)),
+        abs(metrics_values.reshape((4,4))),
         **params,
         ax=global_ax
     )

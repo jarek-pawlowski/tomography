@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
+from src.datasets import MeasurementDataset, VectorDensityMatrixDataset, FilteredDataset
 from src.model import Regressor, Classifier
 from src.test_model import test
 from src.logging import log_metrics_to_file, plot_metrics_from_file
@@ -18,18 +18,27 @@ def list_to_str(l):
     return '_'.join(map(str, l))
 
 
+def is_in_range(label):
+    return (label > 0.99) or (label < 1.e-6)
+    # return (label < 1.e-6)
+
+
 def main(measurement_subset):
     # load data
     batch_size = 512
     train_dataset = MeasurementDataset(root_path='./data/train/', measurement_subset=measurement_subset)
+    train_dataset = FilteredDataset(train_dataset, filter_func=is_in_range, item_idx=1)
+    
     test_dataset = MeasurementDataset(root_path='./data/val/', measurement_subset=measurement_subset)
+    test_dataset = FilteredDataset(test_dataset, filter_func=is_in_range, item_idx=1)
+
     # train_dataset = VectorDensityMatrixDataset(root_path='./data/train/')
     # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     if measurement_subset is None:
-        model_name = 'regressor'
+        model_name = 'regressor_filtered_data'
     else:
         model_name = f'regressor_m{list_to_str(measurement_subset)}'
 
@@ -73,5 +82,6 @@ def main(measurement_subset):
 
 
 if __name__ == '__main__':
-    for measurement in range(16):
-        main(measurement_subset=[measurement])
+    # for measurement in range(16):
+    #     main(measurement_subset=[measurement])
+    main(measurement_subset=None)

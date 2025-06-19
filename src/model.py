@@ -6,6 +6,7 @@ from math import comb
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from src.tomography_utils_torch import measure
 
@@ -202,41 +203,41 @@ class RecurrentMeasurementPredictor(nn.Module):
 
 
 class LSTMMeasurementProjectorPredictor(nn.Module):
-    def __init__(self, num_qubits: int, layers: int = 2, hidden_size: int = 16, max_num_measurements: int = 16):
+    def __init__(self, num_qubits: int, hidden_size: int = 16, max_num_measurements: int = 16):
         super(LSTMMeasurementProjectorPredictor, self).__init__()
         self.max_num_measurements = max_num_measurements
         self.num_qubits = num_qubits
-        self.basis_dim = 2 * (num_qubits*4)
+        self.basis_dim = num_qubits * 4
         self.projector_sufficient_params = num_qubits*4
         self.dens_matrix_dim = 2 * (4 ** num_qubits)
         self.measurement_projector_predictor = nn.LSTMCell(1 + self.basis_dim, hidden_size)
         self.projector = nn.Linear(hidden_size, self.projector_sufficient_params)
 
     def forward(self, first_measurement: t.Tuple[torch.Tensor, torch.Tensor], rho: torch.Tensor):
-        measurement, basis = first_measurement
-        basis_as_vector = torch.stack((basis.real, basis.imag), dim=-1).view(-1, basis.shape[1]*2*2*2)
-        measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+        measurement, projector = first_measurement
+        projector_as_vector = torch.stack((projector.real, projector.imag), dim=-1).view(-1, projector.shape[1]*2*2)
+        measurement_predictor_input = torch.cat((measurement, projector_as_vector), dim=-1)
         rho_complex = torch.complex(rho[:, 0], rho[:, 1]).view(-1, *[2, 2]*self.num_qubits)
 
-        h_i = torch.randn((measurement.shape[0], self.measurement_predictor.hidden_size), device=measurement.device)
-        c_i = torch.randn((measurement.shape[0], self.measurement_predictor.hidden_size), device=measurement.device)
+        h_i = torch.randn((measurement.shape[0], self.measurement_projector_predictor.hidden_size), device=measurement.device)
+        c_i = torch.randn((measurement.shape[0], self.measurement_projector_predictor.hidden_size), device=measurement.device)
 
-        predicted_bases = [basis]
-        measurements_with_basis = [measurement_predictor_input]
+        predicted_projectors = [projector]
+        predicted_measurements = [measurement.squeeze(-1)]
         for _ in range(self.max_num_measurements - 1):
             h_i, c_i  = self.measurement_projector_predictor(measurement_predictor_input, (h_i, c_i))
             measurement_vectors = self.projector(h_i)
-            basis_matrices = self.construct_projectors(measurement_vectors)
-            new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(-1, basis.shape[1]*2*2*2)
+            projector = self.construct_projectors(measurement_vectors)
+            basis_matrices = self.construct_basis_matrices(projector)
+            new_projector_as_vector = torch.stack((projector.real, projector.imag), dim=-1).view(-1, projector.shape[1]*2*2)
             new_measurements = torch.stack([measure(rho_complex_k, basis_matrices_k) for rho_complex_k, basis_matrices_k in zip(rho_complex, basis_matrices)]).unsqueeze(-1)
-            measurement_predictor_input = torch.cat((new_measurements, new_basis_as_vector), dim=-1)
-            measurements_with_basis.append(measurement_predictor_input)
-            predicted_bases.append(basis_matrices)
+            measurement_predictor_input = torch.cat((new_measurements, new_projector_as_vector), dim=-1)
+            predicted_projectors.append(projector)
+            predicted_measurements.append(new_measurements.squeeze(-1))
 
-        measurements_with_basis = torch.stack(measurements_with_basis, dim=1)
-        reconstructed_matrices = self.matrix_reconstructor(measurements_with_basis)
-        predicted_bases = torch.stack(predicted_bases, dim=1)
-        return reconstructed_matrices, predicted_bases
+        predicted_projectors = torch.stack(predicted_projectors, dim=1)
+        predicted_measurements = torch.stack(predicted_measurements, dim=1)
+        return predicted_projectors, predicted_measurements
     
     def construct_projectors(self, measurement_vectors: torch.Tensor):
         basis_vectors = measurement_vectors.view(-1, self.num_qubits, 2, 2)
@@ -245,15 +246,12 @@ class LSTMMeasurementProjectorPredictor(nn.Module):
         return projectors
 
     def construct_basis_matrices(self, projectors: torch.Tensor):
-        # TODO: verify
-        basis_vectors = projectors.view(-1, self.num_qubits, 2, 2)
-        basis_vectors = torch.complex(basis_vectors[..., 0], basis_vectors[..., 1])
-        basis_matrices = torch.zeros(basis_vectors.shape[0], self.num_qubits, 2, 2, dtype=torch.complex64, device=projectors.device)
-        basis_matrices[..., 0, 0] = basis_vectors[..., 0].abs() ** 2
-        basis_matrices[..., 1, 1] = basis_vectors[..., 1].abs() ** 2
-        basis_matrices[..., 0, 1] = basis_vectors[..., 0] * basis_vectors[..., 1].conj()
-        basis_matrices[..., 1, 0] = basis_vectors[..., 1] * basis_vectors[..., 0].conj() 
-        basis_matrices /= torch.vmap(torch.vmap(torch.trace))(basis_matrices).view(*basis_matrices.shape[:-2], 1, 1)
+        basis_matrices = torch.zeros(projectors.shape[0], self.num_qubits, 2, 2, dtype=torch.complex64, device=projectors.device)
+        basis_matrices[..., 0, 0] = projectors[..., 0].abs() ** 2
+        basis_matrices[..., 1, 1] = projectors[..., 1].abs() ** 2
+        basis_matrices[..., 0, 1] = projectors[..., 0] * projectors[..., 1].conj()
+        basis_matrices[..., 1, 0] = projectors[..., 1] * projectors[..., 0].conj() 
+        # basis_matrices /= torch.vmap(torch.vmap(torch.trace))(basis_matrices).view(*basis_matrices.shape[:-2], 1, 1)  # not needed
         return basis_matrices
     
     def save(self, path: str):
@@ -576,7 +574,7 @@ class LSTMMeasurementSelector(nn.Module):
         self.measurement_selector = nn.LSTMCell(1 + self.basis_dim, hidden_size)
         self.projectors = nn.ModuleList([nn.Sequential(
             nn.Linear(hidden_size, len(self.bases)),
-            nn.Softmax(dim=-1)
+            # nn.Softmax(dim=-1)
         ) for _ in range(num_qubits)])
         self.matrix_reconstructor = LSTMDensityMatrixReconstructor(1 + self.basis_dim, num_qubits, layers, hidden_size)
 
@@ -603,16 +601,23 @@ class LSTMMeasurementSelector(nn.Module):
                 # Option 1) argmax
                 # basis_matrices = torch.stack([self.bases[i] for i in torch.argmax(measurement_basis_probability_k, dim=-1)], dim=0).to(rho_k.device)
                 
+                # Option 1b) Gumbel softmax
+                basis_matrices = torch.stack(self.bases, dim=0).to(rho_k.device) # shape (len(bases), 2, 2)
+                measurement_basis_probability_k_gumbel = F.gumbel_softmax(measurement_basis_probability_k, hard=True, dim=-1)
+                measurement_basis_probability_k_expanded = measurement_basis_probability_k_gumbel.view(self.num_qubits, len(self.bases), 1, 1) # shape (num_qubits, len(bases), 1, 1)
+                basis_matrices = torch.sum(basis_matrices * measurement_basis_probability_k_expanded, dim=1) # shape (num_qubits, 2, 2)
+                new_predicted_bases.append(basis_matrices)          
+
                 # Option 2) expectation
                 # bases_ids = torch.arange(0, len(self.bases), device=rho_k.device).float()
                 # most_convenient_bases_ids = torch.matmul(measurement_basis_probability_k, bases_ids[..., None]).round().int()
                 # basis_matrices = torch.stack([self.bases[i] for i in most_convenient_bases_ids], dim=0).to(rho_k.device)
 
                 # Option 3) weighted sum of bases
-                basis_matrices = torch.stack(self.bases, dim=0).to(rho_k.device) # shape (len(bases), 2, 2)
-                measurement_basis_probability_k_expanded = measurement_basis_probability_k.view(self.num_qubits, len(self.bases), 1, 1) # shape (num_qubits, len(bases), 1, 1)
-                basis_matrices = torch.sum(basis_matrices * measurement_basis_probability_k_expanded, dim=1) # shape (num_qubits, 2, 2)
-                new_predicted_bases.append(basis_matrices)
+                # basis_matrices = torch.stack(self.bases, dim=0).to(rho_k.device) # shape (len(bases), 2, 2)
+                # measurement_basis_probability_k_expanded = measurement_basis_probability_k.view(self.num_qubits, len(self.bases), 1, 1) # shape (num_qubits, len(bases), 1, 1)
+                # basis_matrices = torch.sum(basis_matrices * measurement_basis_probability_k_expanded, dim=1) # shape (num_qubits, 2, 2)
+                # new_predicted_bases.append(basis_matrices)
 
                 new_measurement = measure(rho_k, basis_matrices)
                 new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(basis.shape[1]*2*2*2)
@@ -688,8 +693,8 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
                 rho_k = torch.complex(rho_k[0], rho_k[1]).view(*[2, 2]*self.num_qubits)
                 
                 # Option 1) argmax
-                # selected_basis_indices = torch.argmax(measurement_basis_probability_k, dim=-1) # shape (num_qubits)
-                
+                # selected_basis_indices = torch.argmax(measurement_basis_probability_k, dim=-1) # shape (num_qubits)                
+
                 # Option 2) Filtered argmax (choosing highest probability from those not chosen yet)
                 probabilites = reduce(torch.kron, torch.unbind(measurement_basis_probability_k, dim=0)) # shape (len(bases) ** num_qubits)
                 sorted_indices = torch.argsort(probabilites, descending=True, dim=-1)

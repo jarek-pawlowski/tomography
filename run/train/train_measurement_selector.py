@@ -26,7 +26,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    model_name = 'full_lstm_basis_selector_v3_kwiat_basis_loss'
+    model_name = 'full_lstm_basis_selector_gumbel_softmax'
     model_save_path = f'./models/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -57,7 +57,7 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10, bases_loss_fn=kwiat_basis_loss_fn)
+        train_metrics = train_measurement_predictor(model, device, train_loader, optimizer, epoch, criterion=criterion, log_interval=10) #, bases_loss_fn=kwiat_basis_loss_fn)
         test_metrics = test_measurement_predictor(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss']['measurement 15'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']['measurement 15']

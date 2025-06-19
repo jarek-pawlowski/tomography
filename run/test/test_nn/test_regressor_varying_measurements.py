@@ -6,21 +6,29 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
+from src.datasets import MeasurementDataset, VectorDensityMatrixDataset, FilteredDataset
 from src.model import Regressor, Classifier
 from src.criterions import regressor_accuracy
 from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
+
+def is_in_range(label):
+    # return True
+    return (label > 0.99) or (label < 1.e-6)
+    # return (label < 1.e-6)
+
+
 batch_size = 512
-test_dataset = MeasurementDataset(root_path='./data/val/')
+dataset = MeasurementDataset(root_path='./data/val/')
+test_dataset = FilteredDataset(dataset, filter_func=is_in_range, item_idx=1)
 # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path_prefix = './logs/regressor_varying_measurements/regressor_test_varying_measurements_clipped_extended_'
+results_path_prefix = './logs/regressor_varying_measurements/regressor_test_varying_measurements_clipped_train_filtered'
 results_path = '{}{}.log'
-plot_path = './plots/regressor_varying_measurements/regressor_test_varying_measurements_clipped_extended_{}.png'
+plot_path = './plots/regressor_varying_measurements/regressor_test_varying_measurements_clipped_train_filtered_{}.png'
 
-model_path = './models/regressor.pt'
+model_path = './models/regressor_filtered_data.pt'
 model_params = {
     'input_dim': 16,
     'output_dim': 1,
@@ -30,7 +38,7 @@ model_params = {
 }
 model = Regressor(**model_params)
 # model = Classifier(**model_params)
-# model.load(model_path)
+model.load(model_path)
 
 rmse_loss = lambda x, y: torch.sqrt(torch.functional.F.mse_loss(x, y, reduction='none'))
 relative_rmse_loss = lambda x, y: torch.sqrt(torch.functional.F.mse_loss(x, y, reduction='none')) / (y + 1e-5)

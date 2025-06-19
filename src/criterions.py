@@ -1,5 +1,29 @@
 import typing as t
+import numpy as np
 import torch
+
+
+
+def bins_criterion(
+    input: torch.Tensor,
+    target: torch.Tensor,
+    boundaries: t.List[float] | np.ndarray | torch.Tensor,
+    criterion: t.Callable,
+    criterion_args: t.Dict = {},
+    skip_first_bin: bool = True
+) -> t.Dict[int, torch.Tensor]:
+    boundaries = torch.tensor(boundaries).to(target.device)
+    bin_indices = torch.bucketize(target, boundaries).squeeze()
+    bin_losses = {}
+    start_idx = 1 if skip_first_bin else 0
+    for bin_idx in range(start_idx, len(boundaries)):
+        bin_input = input[bin_indices == bin_idx]
+        bin_target = target[bin_indices == bin_idx]
+        if bin_target.numel() == 0:
+            continue
+        bin_loss = criterion(bin_input, bin_target, **criterion_args)
+        bin_losses[bin_idx] = bin_loss
+    return bin_losses
 
 
 def regressor_accuracy(
@@ -30,7 +54,14 @@ def regressor_balanced_accuracy(
     false_positive = (prediction * (1 - target)).sum()
     true_negative = ((1 - prediction) * (1 - target)).sum()
     false_negative = ((1 - prediction) * target).sum()
-    balanced_accuracy = 0.5 * (true_positive / (true_positive + false_negative) + true_negative / (true_negative + false_positive))
+
+    acc_positive = true_positive / (true_positive + false_negative)
+    if true_positive + false_negative == 0:
+        acc_positive = torch.tensor(1.).to(input.device)
+    acc_negative = true_negative / (true_negative + false_positive)
+    if true_negative + false_positive == 0:
+        acc_negative = torch.tensor(1.).to(input.device)
+    balanced_accuracy = 0.5 * (acc_positive + acc_negative)
     if reduction == 'mean':
         return balanced_accuracy.mean()
     return balanced_accuracy
@@ -47,6 +78,8 @@ def regressor_precision(
     true_positive = (prediction * target).sum()
     false_positive = (prediction * (1 - target)).sum()
     precision = true_positive / (true_positive + false_positive)
+    if true_positive + false_positive == 0:
+        precision = torch.tensor(1.).to(input.device)
     return precision
 
 
@@ -61,6 +94,8 @@ def regressor_recall(
     true_positive = (prediction * target).sum()
     false_negative = ((1 - prediction) * target).sum()
     recall = true_positive / (true_positive + false_negative)
+    if true_positive + false_negative == 0:
+        recall = torch.tensor(1.).to(input.device)
     return recall
 
 

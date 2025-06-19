@@ -11,3 +11,6 @@ __pycache__
 *.joblib
 *.ipynb
 *.png
+*.pkl
+*.pickle
+*.log

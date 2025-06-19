@@ -43,6 +43,18 @@ def calculate_dataset_histogram(
     return torch.histogram(population, bins)[0]
 
 
+def calculate_states_count(
+    data_loader: DataLoader,
+    data_filter: t.Callable,
+    label_filter: t.Callable,
+):
+    number_of_states = 0
+    for data, label in tqdm(data_loader, 'Counting states under filter...'):
+        n_states = (data_filter(data) & label_filter(label.squeeze())).sum()
+        number_of_states += n_states.item()
+    return number_of_states
+
+
 def generate_sample_from_mean_and_covariance(mean: torch.Tensor, covariance_matrix: torch.Tensor, batch_size: int = 1):
     mvn = MultivariateNormal(mean, covariance_matrix)
     return mvn.sample((batch_size,))

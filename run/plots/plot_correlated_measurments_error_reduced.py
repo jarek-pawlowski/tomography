@@ -28,7 +28,7 @@ def main():
     log_path_tomography_corrections_regularization_only = f'{global_dir}simple_tomography_corrections_predictor.log'
     log_path_tomography_corrections_basis_and_reg_only = f'{global_dir}simple_basis_only_tomography_corrections_predictor.log'
 
-    plot_path = './plots/correlated_measurements_1qbit_error_bures_distance_avg.png'
+    plot_path = './plots/correlated_measurements_1qbit_error_bures_distance_final_seminar.png'
 
     fixed_metric_name = 'bures_distance' 
     # fixed_metric_name = 'test_mse_loss'
@@ -65,7 +65,7 @@ def main():
     # plt.plot(xaxis, zeroed_tomography_fixed_metrics, label='Kwiat basis tomography\nwith zeroed measurements')
     plt.plot(xaxis, metrics_pinv_gammas[metrics_name], color='b', marker='h', markersize=6, fillstyle='none', linestyle='-.', label='Tomography with\npseudoinverse')
     plt.plot(xaxis, metrics_tomography_corrections[corrections_metrics_name], color='orange', marker='o', linestyle='-', markersize=6, fillstyle='none', label='Corrector NN')
-    plt.plot(xaxis, metrics_tomography_corrections_basis_only[corrections_metrics_name], color='g', marker='x', markersize=5, linestyle='--', label='Corrector NN\n(basis only)')
+    # plt.plot(xaxis, metrics_tomography_corrections_basis_only[corrections_metrics_name], color='g', marker='x', markersize=5, linestyle='--', label='Corrector NN\n(basis only)')
     plt.plot(xaxis, metrics_lstm[lstm_metrics_name], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with\nadjusted basis')
     plt.plot(xaxis, metrics_hlp[metrics_name], color='silver', fillstyle='none', linestyle='-', linewidth=4.5, zorder=-1, label='Analytical\napproximations')
     # plt.plot(xaxis, metrics_tomography_corrections_regularization_only[corrections_metrics_name], label='Tomography corrections predictor\nwith regularization loss only')

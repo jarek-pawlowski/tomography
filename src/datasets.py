@@ -4,7 +4,7 @@ from itertools import product
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 
 from src.tomography_utils_numpy import Measurement, Kwiat
 
@@ -151,3 +151,16 @@ class DerandomizedTestMeasurementDataset(Dataset):
     def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
         m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
         return m_all
+
+
+class FilteredDataset(Dataset):
+    def __init__(self, dataset: Dataset, filter_func: t.Callable, item_idx: int) -> None:
+        self.filter_func = filter_func
+        self.filtered_indices = [i for i in range(len(dataset)) if filter_func(dataset[i][item_idx])]
+        self.dataset = Subset(dataset, self.filtered_indices)
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
+        return self.dataset[idx]
