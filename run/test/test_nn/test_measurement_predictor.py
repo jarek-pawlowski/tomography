@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.model import LSTMMeasurementPredictorStackedInput, SequentialMeasurementPredictor, LSTMMeasurementPredictor, LSTMMeasurementPredictorNoSelectionMeausrements
 from src.criterions import torch_bures_distance
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 
 
 def semidefinite_percentage(predicted_rho: torch.Tensor, target_rho: torch.Tensor) -> float:

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
 from src.model import Regressor
 from src.criterions import regressor_accuracy
-from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
+from src.log import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512
 # test_dataset = MeasurementDataset(root_path='./data/val/')

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.test_heuristics import test_concurrence_measurement_noise
 from src.criterions import regressor_accuracy
-from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
+from src.log import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/')

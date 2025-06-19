@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset, VectorDensityMatrixDataset, FilteredDataset
 from src.model import Regressor, Classifier
 from src.test_model import test
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 
 def list_to_str(l):
     return '_'.join(map(str, l))

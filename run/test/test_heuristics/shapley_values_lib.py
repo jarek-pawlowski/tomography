@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.datasets import MeasurementDataset
-from src.logging import plot_error_map_seaborn
+from src.log import plot_error_map_seaborn
 from src.tomography_utils_torch import calculate_concurrence_from_measurements
 
 

@@ -12,7 +12,7 @@ from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
 from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized
 from src.train import train_discrete_measurement_selector, train_optimized_discrete_measurement_selector
 from src.test_model import test_discrete_measurement_selector
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 
     

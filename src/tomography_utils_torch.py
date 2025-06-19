@@ -71,6 +71,19 @@ def calculate_concurrence_from_measurements(measurements_data: t.Union[torch.Ten
 
 
 def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, gammas: torch.Tensor, enforce_valid_density_matrix: bool = True, inverse: str = 'exact', zero_measurements: t.Optional[t.List[int]] = None):
+    """
+    Torch tomography reconstruction method
+    
+    Args:
+        measurements: tensor of shape (num_measurements)
+        projection_vectors: tensor of shape (num_measurements, dim, 1)
+            where dim = 2**num_qubits
+        gammas: matrices used to reconstruct the density matrix, 
+            e.g. pauli matrices, shape (num_gammas, dim, dim), 
+            where dim = 2**num_qubits
+        enforce_valid_density_matrix: if True, the reconstructed density matrix will be made hermitian,
+            normalized and positive semidefinite
+    """
     B = calculate_B(projection_vectors, gammas).to(measurements.device)
     if inverse == 'exact':
         B_inv = torch.linalg.inv(B)
@@ -96,14 +109,6 @@ def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, ga
 
 
 def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
-    # num_projection_vectors = projection_vectors.shape[0]
-    # num_gammas = gammas.shape[0]
-    # B_old = torch.zeros((num_projection_vectors, num_gammas), dtype=torch.complex64) #, device=gammas.device)
-    # for nu in range(num_projection_vectors):
-    #     for mu in range(num_gammas):
-    #         B_old[nu,mu] = tensordot(projection_vectors[nu], tensordot(gammas[mu], projection_vectors[nu]), conj_tr=(True,False)).item()
-    # # return B_old
-
     # Compute conjugate of projection_vectors
     projection_vectors_conj = torch.conj(projection_vectors)
     

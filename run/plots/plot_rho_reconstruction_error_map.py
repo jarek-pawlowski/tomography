@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.logging import plot_grouped_error_map, load_metrics_from_file
+from src.log import plot_grouped_error_map, load_metrics_from_file
 
 
 nn_results_path = './logs/1qbit/tomography_corrections_predictor_m2/mlp_tomography_corrections_predictor_m{}_complex_distance.log'

@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.model import Regressor, Classifier
 from src.criterions import regressor_accuracy, regressor_precision, regressor_recall, regressor_balanced_accuracy, bins_criterion
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 
 batch_size = 512
 

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
 from src.model import LSTMMeasurementProjectorPredictor
 from src.criterions import bases_loss, contrastive_bases_loss, contrastive_bases_trace_norm_loss
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 from src.test_model import test_measurement_projector_predictor
 from src.train import train_measurement_projector_predictor

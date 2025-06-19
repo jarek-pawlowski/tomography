@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset, VectorDensityMatrixDataset, FilteredDataset
 from src.model import Regressor, Classifier
 from src.criterions import regressor_accuracy
-from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
+from src.log import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 
 def is_in_range(label):

@@ -15,7 +15,7 @@ from torch.multiprocessing import Queue, Process, set_start_method
 from src.datasets import MeasurementDataset
 from src.model import TomographyCorrectionsPredictor, TomographyM2CorrectionsPredictor
 from src.criterions import torch_bures_distance, complex_distance_matrix_elements_avg
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 from src.test_model import test_tomography_corrections_predictor
 from src.train import train_tomography_corrections_predictor

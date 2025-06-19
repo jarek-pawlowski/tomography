@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from src.logging import multiplot_metrics_from_files, plot_metrics_from_files, plot_map_from_files, plot_map_from_file
+from src.log import multiplot_metrics_from_files, plot_metrics_from_files, plot_map_from_files, plot_map_from_file
 
 
 regressor_results_path_prefix = './logs/regressor_varying_measurements/regressor_test_varying_measurement_clipped_'

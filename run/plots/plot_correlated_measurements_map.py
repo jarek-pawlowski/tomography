@@ -12,7 +12,7 @@ from src.tomography_utils_numpy import Kwiat
 from src.datasets import DerandomizedTestMeasurementDataset
 from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized, LSTMMeasurementPredictor, LSTMMeasurementSelector
 from src.model_utils import collect_rhos_with_closest_kwiat_bases, collect_kwiat_measurements_basis_probabilities_from_discrete_model, collect_measurements_outputs_from_model
-from src.logging import plot_matrices
+from src.log import plot_matrices
 
 batch_size = 128
 data_name = 'Xs'

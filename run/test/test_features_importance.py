@@ -16,7 +16,7 @@ from src.datasets import MeasurementDataset, VectorDensityMatrixDataset
 from src.model import Regressor, Classifier
 from src.data_utils import calculate_dataset_statistics
 from src.tomography_utils_torch import calculate_concurrence_from_measurements
-from src.logging import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
+from src.log import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512
 test_dataset = MeasurementDataset(root_path='./data/val/')

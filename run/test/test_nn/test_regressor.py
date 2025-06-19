@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from src.datasets import MeasurementDataset
 from src.model import Regressor, Classifier
 from src.criterions import regressor_accuracy, regressor_precision, regressor_recall, regressor_balanced_accuracy
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 
 measurement_subsets_4 = [[0, 1, 4, 5], [2, 3, 6, 7], [8, 9, 12, 13], [10, 11, 14, 15]]
 measurement_subsets_12 = [[i for i in range(16) if i not in subset] for subset in measurement_subsets_4]

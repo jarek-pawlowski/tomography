@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset
 from src.criterions import torch_bures_distance, complex_distance_matrix_elements_avg
-from src.logging import log_metrics_to_file, plot_metrics_from_file
+from src.log import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 from src.test_heuristics import test_1qbit_hlp
 

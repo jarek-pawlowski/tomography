@@ -1,7 +1,7 @@
 import sys
 sys.path.append('./')
 
-from src.logging import plot_metrics_from_file, plot_metrics_from_files
+from src.log import plot_metrics_from_file, plot_metrics_from_files
 
 results_path_prefix = './logs/regressor_varying_pair_measurements/regressor_test_varying_measurement_clipped_'
 results_path = '{}{}.log'

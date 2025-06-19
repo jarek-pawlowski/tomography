@@ -6,7 +6,7 @@ sys.path.append('./')
 
 import matplotlib.pyplot as plt
 
-from src.logging import plot_metrics_from_file, plot_metrics_from_files, load_metrics_from_file
+from src.log import plot_metrics_from_file, plot_metrics_from_files, load_metrics_from_file
 
 results_nn_path = './logs/regressor_test_conc.log'
 results_rf_path = './logs/rf1_accuracy.csv'

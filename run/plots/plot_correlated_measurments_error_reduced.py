@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from src.datasets import MeasurementDataset
 from src.model import SequentialMeasurementPredictor, LSTMMeasurementPredictor
 from src.criterions import torch_bures_distance
-from src.logging import load_metrics_from_file
+from src.log import load_metrics_from_file
 
 
 def main():
