@@ -1,4 +1,6 @@
 import sys
+
+import numpy as np
 sys.path.append('.')
 import os
 from typing import Type
@@ -31,7 +33,6 @@ def list_to_str(l):
 
     
 def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, test_loader: DataLoader, measurement_subset: set, dir_name: str, model_input_info: str, num_qubits:int = 2, simplifed_training: bool = False):
-    sys.stdout = open("/dev/null", 'w')
     # measurement_subset = random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len)
     measurement_subset_len = len(measurement_subset)
 
@@ -47,14 +48,17 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
         'num_measurements': measurement_subset_len,
         'num_gammas': 4**num_qubits,
         'layers': 6,
-        'hidden_size': 1024,
+        'hidden_size': 64, # 1024
     }
     # model = TomographyM2CorrectionsPredictor(**model_params)
     model = TomographyCorrectionsPredictor(**model_params)
 
-    model_name = 'mlp_tomography_corrections_predictor_hs1024'
+    model_name = 'mlp_tomography_corrections_predictor'
     model_name = f'{model_name}_m{list_to_str(measurement_subset)}'
     model_save_path = f'./models/{dir_name}/{model_name}.pt'
+
+    sys.stdout = open(f"./logs/debug/{model_name}.log", 'w')
+
 
     # model.load(model_save_path)
 
@@ -143,27 +147,31 @@ def generate_random_measurements_subsets(num_measurements: int, num_repetitions:
 
 
 if __name__ == '__main__':
-    num_repetitions = 10
-    num_qubits = 3
+    num_repetitions = 2
+    num_qubits = 4
     min_num_measurements = 1
-    max_num_measurements = 64 #4 ** num_qubits
+    max_num_measurements = 256
+    step = 4
+    num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
+    num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
+
     model_input_info = 'full'
-    log_path = f'./logs/3qbits/tomography_corrections_predictor_hs1024.log'
+    log_path = f'./logs/4qbits/tomography_corrections_predictor_hs1024.log'
     simplifed_training = False
 
     batch_size = 64
-    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     queue = Queue()
 
-    for num_measurements in range(min_num_measurements, max_num_measurements + 1):
+    for num_measurements in num_measurements_range:
         num_possible_measurements = comb(len(Kwiat.basis)**num_qubits, num_measurements)
         actual_num_repetitions = min(num_repetitions, num_possible_measurements)
 
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'3qbits/tomography_corrections_predictor_m{num_measurements}'
+        dir_name = f'4qbits/tomography_corrections_predictor_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),

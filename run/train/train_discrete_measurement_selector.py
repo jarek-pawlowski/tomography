@@ -19,19 +19,19 @@ from src.tomography_utils_numpy import Kwiat
 def main():
     # load data
     batch_size = 64
-    num_qubits = 2
-    # train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    # test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
-    train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
-    test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
+    num_qubits = 3
+    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    # train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
+    # test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # create model
-    pretrained_model_name = 'Xs_discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
-    pretrained_model_save_path = f'./models/{num_qubits}qbits/{pretrained_model_name}.pt'
+    # pretrained_model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_frozen_measurements_1_epoch'
+    # pretrained_model_save_path = f'./models/{num_qubits}qbits/{pretrained_model_name}.pt'
 
-    model_name = 'pretrained_Xs_discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs_ordered_equal-lr'
+    model_name = 'discrete_optimized_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_frozen_measurements_1_epoch'
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -41,12 +41,12 @@ def main():
         'num_qubits': num_qubits,
         'possible_basis_matrices': basis_matrices, # 'Kwiat' basis matrices
         'layers': 6,
-        'hidden_size': 128,
+        'hidden_size': 256,
         'max_num_measurements': 4**num_qubits
     }
-    # model = LSTMDiscreteMeasurementSelectorOptimized(**model_params)
-    model = LSTMDiscreteMeasurementSelector(**model_params)
-    model.load(pretrained_model_save_path)
+    model = LSTMDiscreteMeasurementSelectorOptimized(**model_params)
+    # model = LSTMDiscreteMeasurementSelector(**model_params)
+    # model.load(pretrained_model_save_path)
 
     # train & test model
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
@@ -63,8 +63,13 @@ def main():
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        # train_metrics = train_optimized_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1, num_noisy_epochs=0)
-        train_metrics = train_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1, num_noisy_epochs=0, selector_train_mode='ordered')
+        if epoch == 1:
+            freeze_measurements = True
+        else:
+            freeze_measurements = False
+        train_metrics = train_optimized_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1, num_noisy_epochs=0, frozen_measurements_order=freeze_measurements)
+
+        # train_metrics = train_discrete_measurement_selector(model, device, train_loader, reconstructor_optimizer, selector_optimizer, epoch, reconstructor_criterion=criterion, selector_criterion=selector_criterion, log_interval=10, num_reconstructor_repeats=1, num_selector_repeats=1, num_noisy_epochs=0, selector_train_mode='ordered')
         test_metrics = test_discrete_measurement_selector(model, device, test_loader, criterions, model_params['max_num_measurements'])
         if test_metrics['test_loss'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
             best_test_loss = test_metrics['test_loss'][f'measurement {4**num_qubits - 1}']

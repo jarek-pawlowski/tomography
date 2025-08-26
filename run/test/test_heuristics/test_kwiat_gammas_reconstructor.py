@@ -1,5 +1,7 @@
 import sys
 
+import numpy as np
+
 from src.test_heuristics import test_kwiat_gammas_reconstruction
 sys.path.append('./')
 import os
@@ -65,19 +67,23 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
 
 if __name__ == '__main__':
     num_repetitions = 10
-    min_num_measurements = 2
-    max_num_measurements = 4
-    num_qubits = 1
+    min_num_measurements = 1
+    max_num_measurements = 256
+    step = 4
+    num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
+    num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
+
+    num_qubits = 4
     inverse = 'pinv'
     enforce_valid_density_matrix = False
-    dir_name = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_no_enforcement2/'
-    log_path = f'./logs/1qbit/density_matrix_reconstructor_from_pinv_gammas_no_enforcement2.log'
+    dir_name = f'./logs/4qbits/density_matrix_reconstructor_from_pinv_gammas/'
+    log_path = f'./logs/4qbits/density_matrix_reconstructor_from_pinv_gammas.log'
 
     batch_size = 64
-    test_dataset = MeasurementDataset(root_path='./data/1qbit/val/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    for num_measurements in range(min_num_measurements, max_num_measurements + 1):
+    for num_measurements in num_measurements_range:
         print(f'Running for {num_measurements} measurements')
         metrics = {
             'mse_loss_avg': 0,
@@ -123,4 +129,4 @@ if __name__ == '__main__':
 
         write_mode = 'a' if num_measurements == min_num_measurements else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/3qbit/density_matrix_reconstructor_from_pinv_gammas_metrics.png', xaxis='num_measurements')
+    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/4qbits/density_matrix_reconstructor_from_pinv_gammas_metrics.png', xaxis='num_measurements')
