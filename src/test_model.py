@@ -667,3 +667,58 @@ def _calculate_model_output_from_randomized_input(
     data_i[:, torch.tensor(feature_idx)] = varied_data
     output = model(data_i)
     return output
+
+
+
+def test_lstm_reconstructor(
+    model: nn.Module,
+    device: torch.device,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+    measurements_order: torch.Tensor,
+) -> t.Dict[str, float]:
+
+
+    model.eval()
+    model.to(device)
+
+    bases = [
+        torch.from_numpy(base).to(device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases)
+
+    max_num_measurements = 4**model.num_qubits
+
+    metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
+    with torch.no_grad():
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+            rho, measurement = rho.to(device), measurement.to(device)
+            qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
+
+            target = rho.to(device)
+
+            measurements_order_ = measurements_order.to(device).unsqueeze(0).expand(target.shape[0], -1)
+
+            measurements_with_basis = []
+            for i in range(measurement.shape[1]):
+                measurement_i = measurement[:, i:i+1]
+                basis_i = qubits_bases_batch[:, i]
+                basis_as_vector = torch.stack((basis_i.real, basis_i.imag), dim=-1).view(-1, model.num_qubits*2*2*2)
+                reconstructor_input = torch.cat((measurement_i, basis_as_vector), dim=-1)
+                measurements_with_basis.append(reconstructor_input)
+
+            measurements_with_basis = torch.stack(measurements_with_basis, dim=1) # shape (batch, max_num_measurements, num_qubits*2*2*2 + 1)
+            measurements_with_basis_ordered = torch.gather(measurements_with_basis, 1, measurements_order_.unsqueeze(-1).expand(-1, -1, measurements_with_basis.shape[-1]))  # shape (batch, max_num_measurements, num_qubits*2*2*2 + 1)
+
+            predictions  = model(measurements_with_basis_ordered)
+            for name, criterion in criterions.items():
+                for i in range(predictions.shape[1]):
+                    metrics[name][f'measurement {i}'] += criterion(predictions[:, i], target).item()
+
+    for name in metrics.keys():
+        for i in range(max_num_measurements):
+            metrics[name][f'measurement {i}'] /= len(test_loader)
+            print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
+    return metrics

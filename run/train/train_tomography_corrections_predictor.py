@@ -47,7 +47,7 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
         'input_dim': measurement_subset_len*input_dim,
         'num_measurements': measurement_subset_len,
         'num_gammas': 4**num_qubits,
-        'layers': 6,
+        'layers': 2,
         'hidden_size': 64, # 1024
     }
     # model = TomographyM2CorrectionsPredictor(**model_params)
