@@ -1,4 +1,4 @@
-from functools import reduce
+from functools import reduce, cache
 from itertools import product
 import random
 import typing as t
@@ -9,7 +9,7 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.tomography_utils_torch import calculate_B, reconstruct, reconstruct_with_nn_corrections, reconstruct_with_nn_corrections_and_B_inv
+from src.tomography_utils_torch import calculate_B, calculate_B_inv, reconstruct, reconstruct_with_nn_corrections, reconstruct_with_nn_corrections_and_B_inv, tensordot
 from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat, Kwiat_projectors
 
 
@@ -237,16 +237,27 @@ def train_tomography_corrections_predictor(
     # gammas = torch.tensor(Gammas, dtype=torch.complex64, device=device)
     gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=device)
 
+    if measurements_subset is not None:
+        selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
+
+    B = calculate_B(selected_projection_vectors, gammas)
+    with torch.no_grad():
+        B_inv = calculate_B_inv(selected_projection_vectors, gammas, method = 'pinv').detach()
+
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}', file=std_out)
     for batch_idx, (rho, measurement, _) in pbar:
         rho, measurement = rho.to(device), measurement.to(device)
+        B_expand = B.unsqueeze(0).expand(measurement.shape[0], -1, -1).to(measurement.device)
+        B_inv_expand = B_inv.unsqueeze(0).expand(measurement.shape[0], -1, -1).to(measurement.device)
+        
         optimizer.zero_grad()
+
         if type(measurements_subset) == int:
             measurements_subset = random.sample(range(measurement.shape[1]), measurements_subset)
+            selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
         if measurements_subset is not None:
             measurement = measurement[:, measurements_subset]
             selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
-            selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
 
         selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1) # expand for batch dimension
         basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
@@ -261,11 +272,11 @@ def train_tomography_corrections_predictor(
         
         if use_m2_corrections:
             m2_corrections, inverse_corrections, r_corrections = model(measurement_predictor_input)
-            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, use_only_regularization, regularization_weight, m2_corrections)
+            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, B_expand, B_inv_expand, use_only_regularization, regularization_weight, m2_corrections)
         else:
             inverse_corrections, r_corrections = model(measurement_predictor_input)
-            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, use_only_regularization, regularization_weight)
-        
+            loss = corrections_loss(criterion, selected_projection_vectors, gammas, rho, measurement, inverse_corrections, r_corrections, B_expand, B_inv_expand, use_only_regularization, regularization_weight)
+
         loss.backward()
         optimizer.step()
         metrics['train_loss'] += loss.item()
@@ -283,6 +294,8 @@ def corrections_loss(
     measurement: torch.Tensor,
     inverse_corrections: torch.Tensor,
     r_corrections: torch.Tensor,
+    B: torch.Tensor = None,
+    B_inv: torch.Tensor = None,
     use_only_regularization: bool = False,
     regularization_weight: float = 0.1,
     m2_corrections: t.Optional[torch.Tensor] = None
@@ -293,15 +306,22 @@ def corrections_loss(
     
     loss = 0.
     if not use_only_regularization:
-        reconstructed_rho = reconstruct_rho_from_corrections(selected_projection_vectors, gammas, measurement, complex_inverse_corrections, complex_r_corrections, complex_m2_corrections)
+        if m2_corrections is not None:
+            # Temporarily, should be vectorized as well
+            reconstructed_rho = reconstruct_rho_from_corrections(selected_projection_vectors, gammas, measurement, complex_inverse_corrections, complex_r_corrections, complex_m2_corrections)
+        else:
+            reconstructed_rho = reconstruct_rho_from_corrections_vectorized(gammas, measurement, complex_inverse_corrections, complex_r_corrections, B_inv)
+
         reconstruction_loss = criterion(reconstructed_rho, rho)
         loss = loss + reconstruction_loss
 
-    B = calculate_B(selected_projection_vectors, gammas).to(rho.device)
-    total_corrections = torch.stack([
-        torch.matmul(B, (torch.matmul(inverse_correction_i.T, measurement_i.to(torch.complex64)) + r_correction_i))
-        for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
-    ])
+    corrected_measurements = complex_inverse_corrections.transpose(-1, -2) @ measurement.to(torch.complex64).unsqueeze(-1)
+    total_corrections = B @ (corrected_measurements + complex_r_corrections.unsqueeze(-1))
+
+    # total_corrections = torch.stack([
+    #     torch.matmul(B, (torch.matmul(inverse_correction_i.T, measurement_i.to(torch.complex64)) + r_correction_i))
+    #     for measurement_i, inverse_correction_i, r_correction_i in zip(measurement, complex_inverse_corrections, complex_r_corrections)
+    # ])
     total_corrections = torch.stack([total_corrections.real, total_corrections.imag], dim=1)
     corrections_regularization_loss = torch.nn.functional.mse_loss(total_corrections, torch.zeros_like(total_corrections))
     loss = loss + regularization_weight*corrections_regularization_loss
@@ -332,6 +352,18 @@ def corrections_loss_with_dynamic_selection(
     corrections_regularization_loss = torch.nn.functional.mse_loss(total_corrections, torch.zeros_like(total_corrections))
     loss = reconstruction_loss + 0.1*corrections_regularization_loss
     return loss
+
+
+def reconstruct_rho_from_corrections_vectorized(gammas: torch.Tensor, measurement: torch.Tensor, complex_inverse_corrections: torch.Tensor, complex_r_corrections: torch.Tensor, B_inv: torch.Tensor):    
+    B_inv_corr = B_inv + complex_inverse_corrections.transpose(-1, -2)
+    
+    B_corr = B_inv_corr @ measurement.to(torch.complex64).unsqueeze(-1)
+    r = B_corr.squeeze(-1) + complex_r_corrections
+
+    rho = tensordot(gammas, r, indices=([0], [1]), moveaxis=(-1, 0))
+
+    reconstructed_rho = torch.stack([rho.real, rho.imag], dim=1)
+    return reconstructed_rho
 
 
 def reconstruct_rho_from_corrections(selected_projection_vectors: torch.Tensor, gammas: torch.Tensor, measurement: torch.Tensor, complex_inverse_corrections: torch.Tensor, complex_r_corrections: torch.Tensor, complex_m2_corrections: t.Optional[torch.Tensor] = None):
@@ -697,6 +729,7 @@ def train_lstm_reconstructor(
     measurements_order: torch.Tensor,
     log_interval: int = 100,
     criterion: t.Callable = nn.MSELoss(),
+    std_out: t.Optional[t.IO] = None,
 ) -> t.Dict[str, t.List[float]]:
 
     model.train()
@@ -709,7 +742,7 @@ def train_lstm_reconstructor(
     qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
     qubits_bases = torch.stack(qubits_bases)
 
-    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}')
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}', file=std_out)
     for batch_idx, (rho, measurement, _) in pbar:
         optimizer.zero_grad()
         rho, measurement = rho.to(device), measurement.to(device)

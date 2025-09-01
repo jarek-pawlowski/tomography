@@ -42,32 +42,32 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
         'test_mse_loss': criterion,
         'test_rmse_loss': rmse_loss,
         'bures_distance': bures_distance,
-        'avg_complex_distance': complex_distance_matrix_elements_avg
+        # 'avg_complex_distance': complex_distance_matrix_elements_avg
     }
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     test_metrics = test_kwiat_gammas_reconstruction(device, test_loader, criterions, measurements_subset=list(measurement_subset), inverse=inverse, enforce_valid_density_matrix=enforce_valid_density_matrix)
-    matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
+    # matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
     best_mse_loss = test_metrics['test_mse_loss']
     best_bures_distance = test_metrics['bures_distance']
     best_rmse_loss = test_metrics['test_rmse_loss']
-    log_path = os.path.join(dir_name, f'reconstruction_from_m{list_to_str(measurement_subset)}.log')
-    log_metrics_to_file(test_metrics, log_path, xaxis=num_measurements, xaxis_name='num_measurements')
-    matrix_elements_log_path = os.path.join(dir_name, f'complex_distance_reconstruction_from_m{list_to_str(measurement_subset)}.log')
+    # log_path = os.path.join(dir_name, f'reconstruction_from_m{list_to_str(measurement_subset)}.log')
+    # log_metrics_to_file(test_metrics, log_path, xaxis=num_measurements, xaxis_name='num_measurements')
+    # matrix_elements_log_path = os.path.join(dir_name, f'complex_distance_reconstruction_from_m{list_to_str(measurement_subset)}.log')
     # matrix_metrics_dict = {
     #     '00': matrix_elements_complex_distance[0, 0].item(),
     #     '01': matrix_elements_complex_distance[0, 1].item(),
     #     '10': matrix_elements_complex_distance[1, 0].item(),
     #     '11': matrix_elements_complex_distance[1, 1].item()
     # }
-    matrix_metrics_dict = convert_tensor_to_dict(matrix_elements_complex_distance)
-    log_metrics_to_file(matrix_metrics_dict, matrix_elements_log_path, xaxis=num_measurements, xaxis_name='num_measurements')
+    # matrix_metrics_dict = convert_tensor_to_dict(matrix_elements_complex_distance)
+    # log_metrics_to_file(matrix_metrics_dict, matrix_elements_log_path, xaxis=num_measurements, xaxis_name='num_measurements')
     return best_mse_loss, best_rmse_loss, best_bures_distance
 
 
 if __name__ == '__main__':
     num_repetitions = 10
-    min_num_measurements = 1
+    min_num_measurements = 61
     max_num_measurements = 256
     step = 4
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     batch_size = 64
     test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, prefetch_factor=4, num_workers=1)
 
     for num_measurements in num_measurements_range:
         print(f'Running for {num_measurements} measurements')
@@ -101,7 +101,9 @@ if __name__ == '__main__':
 
         used_measurements = []
         num_possible_measurements = comb(len(Kwiat.basis)**num_qubits, num_measurements)
-        for _ in range(num_repetitions):
+        
+        iteration = 1
+        while (iteration < num_repetitions) or (num_successes < 2):        
             if len(used_measurements) == num_possible_measurements:
                 break
             try:
@@ -117,7 +119,8 @@ if __name__ == '__main__':
                 metrics['bures_distance_max'] = max(metrics['bures_distance_max'], bures_distance)
                 num_successes += 1
             except Exception as e:
-                pass
+                print(f'Error during reconstruction: {e}')
+            iteration += 1
 
         denominator = min(num_repetitions, num_possible_measurements)
         metrics['successes_ratio'] = num_successes / denominator

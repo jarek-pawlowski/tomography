@@ -676,6 +676,7 @@ def test_lstm_reconstructor(
     test_loader: DataLoader,
     criterions: t.Dict[str, t.Callable],
     measurements_order: torch.Tensor,
+    std_out: t.Optional[t.IO] = None,
 ) -> t.Dict[str, float]:
 
 
@@ -693,7 +694,7 @@ def test_lstm_reconstructor(
 
     metrics = {name: {f'measurement {i}': 0 for i in range(max_num_measurements)} for name in criterions.keys()}
     with torch.no_grad():
-        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+        for rho, measurement, _ in tqdm(test_loader, desc='Testing model...', file=std_out):
             rho, measurement = rho.to(device), measurement.to(device)
             qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1, -1, -1)
 

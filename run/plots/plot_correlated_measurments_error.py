@@ -17,6 +17,7 @@ from src.log import load_metrics_from_file
 
 def main():
     # set paths 
+    log_path_lstm_random_selection = './logs/2qbits/lstm_reconstructor.log'
     log_path_lstm = './logs/full_lstm_measure_basis_meauremnt_dependence.log'
     log_path_lstm_no_selection = './logs/2qbits/full_lstm_measure_basis_no_measurement_for_selection_meauremnt_dependence.log'
     log_path_smp = './logs/smp_measure_basis_meauremnt_dependence.log'
@@ -54,6 +55,7 @@ def main():
     # load data
     # metrics_lstm = load_metrics_from_file(log_path_lstm)
     metrics_lstm = load_metrics_from_file(log_path_lstm_no_selection)
+    metrics_random_lstm = load_metrics_from_file(log_path_lstm_random_selection)
     metrics_smp = load_metrics_from_file(log_path_smp)
     metrics_kwiat_basis_lstm = load_metrics_from_file(log_path_kwiat_basis_lstm)
     metrics_discrete_kwiat_basis_lstm = load_metrics_from_file(log_path_discrete_kwiat_basis_lstm)
@@ -114,6 +116,7 @@ def main():
     plt.plot(np.arange(1, 17), metrics_m2_tomography_corrections_basis_only[new_metric_name], color='lime', marker='|', markersize=5, linestyle=(0, (3, 3)), label='$M^2$-Corrector NN (basis only)')
     plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], color='darkred', marker='^', markersize=5, fillstyle='none', linestyle=(0, (1, 3)), label='LSTM with James et al. basis') # noise turned off after 10 epochs
     plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
+    plt.plot(np.arange(1, 17), metrics_random_lstm[new_metric_name], color='m', marker='*', markersize=5, linestyle='--', fillstyle='none', label='LSTM with random basis')
     # plt.plot(np.arange(1, 17), metrics_lstm_no_selection[metric_to_plot], color='magenta', marker='p', markersize=5, fillstyle='none', linestyle=(0, (2, 5)), label='LSTM with adjusted basis\n(basis only)')
     # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
     # plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')

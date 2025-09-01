@@ -23,16 +23,12 @@ from src.test_model import test_tomography_corrections_predictor
 from src.train import train_tomography_corrections_predictor
 
 try:
-     set_start_method('spawn')
+    set_start_method('spawn')
 except RuntimeError:
     pass
 
-
-def list_to_str(l):
-    return '_'.join([str(x) for x in l])
-
     
-def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, test_loader: DataLoader, measurement_subset: set, dir_name: str, model_input_info: str, num_qubits:int = 2, simplifed_training: bool = False):
+def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: DataLoader, test_loader: DataLoader, measurement_subset: set, dir_name: str, model_input_info: str, num_qubits:int = 2, simplifed_training: bool = False):
     # measurement_subset = random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len)
     measurement_subset_len = len(measurement_subset)
 
@@ -54,7 +50,7 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
     model = TomographyCorrectionsPredictor(**model_params)
 
     model_name = 'mlp_tomography_corrections_predictor'
-    model_name = f'{model_name}_m{list_to_str(measurement_subset)}'
+    model_name = f'{model_name}_mid{mid}'
     model_save_path = f'./models/{dir_name}/{model_name}.pt'
 
     sys.stdout = open(f"./logs/debug/{model_name}.log", 'w')
@@ -66,7 +62,7 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
     # train & test model
     log_path = f'./logs/{dir_name}/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    matrix_elements_log_path = f'./logs/{dir_name}/{model_name}_complex_distance.log'
+    # matrix_elements_log_path = f'./logs/{dir_name}/{model_name}_complex_distance.log'
 
     num_epochs = 3
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -75,7 +71,7 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
     criterions = {
         'test_loss': criterion,
         'bures_distance': bures_distance,
-        'avg_complex_distance': complex_distance_matrix_elements_avg
+        # 'avg_complex_distance': complex_distance_matrix_elements_avg
     }
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -108,7 +104,7 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
             trace_normalization=simplifed_training,
             use_m2_corrections=False
         )
-        matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
+        # matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
         if test_metrics['test_loss'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']
             best_bures_distance = test_metrics['bures_distance']
@@ -117,13 +113,13 @@ def calculate_single_run_metrics(result_queue: Queue, train_loader: DataLoader, 
         metrics = {**train_metrics, **test_metrics}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
-        matrix_metrics_dict = {
-        '00': matrix_elements_complex_distance[0, 0].item(),
-        '01': matrix_elements_complex_distance[0, 1].item(),
-        '10': matrix_elements_complex_distance[1, 0].item(),
-        '11': matrix_elements_complex_distance[1, 1].item()
-        }
-        log_metrics_to_file(matrix_metrics_dict, matrix_elements_log_path, write_mode=write_mode, xaxis=epoch)
+        # matrix_metrics_dict = {
+        # '00': matrix_elements_complex_distance[0, 0].item(),
+        # '01': matrix_elements_complex_distance[0, 1].item(),
+        # '10': matrix_elements_complex_distance[1, 0].item(),
+        # '11': matrix_elements_complex_distance[1, 1].item()
+        # }
+        # log_metrics_to_file(matrix_metrics_dict, matrix_elements_log_path, write_mode=write_mode, xaxis=epoch)
 
     plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{dir_name}/{model_name}_loss.png')
 
@@ -147,16 +143,16 @@ def generate_random_measurements_subsets(num_measurements: int, num_repetitions:
 
 
 if __name__ == '__main__':
-    num_repetitions = 2
+    num_repetitions = 5
     num_qubits = 4
-    min_num_measurements = 1
+    min_num_measurements = 17
     max_num_measurements = 256
     step = 4
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
     num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
 
     model_input_info = 'full'
-    log_path = f'./logs/4qbits/tomography_corrections_predictor_hs1024.log'
+    log_path = f'./logs/{num_qubits}qbits/tomography_corrections_predictor_hs1024.log'
     simplifed_training = False
 
     batch_size = 64
@@ -166,12 +162,12 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     queue = Queue()
 
-    for num_measurements in num_measurements_range:
+    for i, num_measurements in enumerate(num_measurements_range):
         num_possible_measurements = comb(len(Kwiat.basis)**num_qubits, num_measurements)
         actual_num_repetitions = min(num_repetitions, num_possible_measurements)
 
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'4qbits/tomography_corrections_predictor_m{num_measurements}'
+        dir_name = f'{num_qubits}qbits/tomography_corrections_predictor_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),
@@ -183,7 +179,7 @@ if __name__ == '__main__':
         queue.put(metrics)
 
         measurement_sets = generate_random_measurements_subsets(num_measurements, actual_num_repetitions)
-        processes = [Process(target=calculate_single_run_metrics, args=(queue, train_loader, test_loader, measurement_sets[i], dir_name, model_input_info, num_qubits, simplifed_training)) for i in range(actual_num_repetitions)]
+        processes = [Process(target=calculate_single_run_metrics, args=(queue, i, train_loader, test_loader, measurement_sets[i], dir_name, model_input_info, num_qubits, simplifed_training)) for i in range(actual_num_repetitions)]
 
         for process in processes:
             process.start()
@@ -196,7 +192,7 @@ if __name__ == '__main__':
 
         metrics['test_loss_avg'] /= actual_num_repetitions
         metrics['bures_distance_avg'] /= actual_num_repetitions
-        write_mode = 'w' if num_measurements == min_num_measurements else 'a'
-        # write_mode = 'a'
+        # write_mode = 'w' if num_measurements == min_num_measurements else 'a'
+        write_mode = 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/2qbits/tomography_corrections_predictor_hs1024.png', xaxis='num_measurements')
+    # plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/2qbits/tomography_corrections_predictor_hs1024.png', xaxis='num_measurements')

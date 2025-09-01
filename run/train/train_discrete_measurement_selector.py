@@ -20,9 +20,9 @@ from src.tomography_utils_numpy import Kwiat
 def main():
     # load data
     batch_size = 64
-    num_qubits = 2
-    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True, num_qubits=num_qubits)
+    num_qubits = 3
+    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     # train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
     # test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

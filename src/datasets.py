@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import Dataset, Subset
 
 from src.tomography_utils_numpy import Measurement, Kwiat
+from src.tomography_utils_torch import measure_batch_kron
 
 
 DICTIONARY_NAME = 'dictionary.txt'
@@ -77,12 +78,17 @@ class MeasurementDataset(DensityMatrixDataset):
         num_qubits: int = 2,
     ) -> None:
         super().__init__(root_path)
+        self.num_qubits = num_qubits
+        basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
+        self.basis_matrices = torch.stack(basis_matrices, dim=0)
+        self.all_measurement_matrices = torch.stack(
+            [torch.stack([self.basis_matrices[i] for i in qubits_ids]) for qubits_ids in product(range(4), repeat=self.num_qubits)]
+        )
         self.measurement = Measurement(Kwiat, num_qubits)
         self.return_density_matrix = return_density_matrix
         self.binary_label = binary_label
         self.mask_measurements = mask_measurements
         self.measurement_subset = measurement_subset
-        self.num_qubits = num_qubits
         if data_limit is not None:
             self.dict = self.dict[:data_limit]
 
@@ -91,16 +97,12 @@ class MeasurementDataset(DensityMatrixDataset):
         matrix = self.read_matrix(filename)
         rho = self.convert_numpy_matrix_to_tensor(matrix)
 
-        # reshape density matrix from (4, 4) to (2, 2, 2, 2) in case of 2 qubits
-        # is it possible to generalize this? e.g. (16, 16) to (2, 2, 2, 2, 2, 2, 2, 2) for 4 qubits?
-        # matrix = matrix.reshape((2, 2, 2, 2))
-        matrix = matrix.reshape([2]*2*self.num_qubits)
-        measurements = self._get_all_measurements(matrix)
+        measurements = self._get_all_measurements(rho)
         if self.mask_measurements is not None:
-            measurements = np.array([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
+            measurements = torch.tensor([measurement if i not in self.mask_measurements else np.random.rand() for i, measurement in enumerate(measurements)])
         if self.measurement_subset is not None:
-            measurements = np.array([measurement for i, measurement in enumerate(measurements) if i in self.measurement_subset])
-        tensor = torch.from_numpy(measurements).float()
+            measurements = torch.tensor([measurement for i, measurement in enumerate(measurements) if i in self.measurement_subset])
+        tensor = measurements.float()
         label = float(self.dict[idx][1])
         label = torch.tensor(label).unsqueeze(-1)
         if self.binary_label:
@@ -110,10 +112,11 @@ class MeasurementDataset(DensityMatrixDataset):
             return (tensor, label)
         return (rho, tensor, label)
     
-    def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
-        m_all = np.array([self.measurement.measure(rho_in, qubits_ids) for qubits_ids in product(range(4), repeat=self.num_qubits)])
-        # m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
-        return m_all
+    def _get_all_measurements(self, rho: torch.Tensor) -> torch.Tensor:
+        rho_complex = torch.complex(rho[0], rho[1])
+        rho_complex_expand = rho_complex.unsqueeze(0).expand(self.all_measurement_matrices.shape[0], *rho_complex.shape)
+        measurements = measure_batch_kron(rho_complex_expand, self.all_measurement_matrices)
+        return measurements
 
 
 class DerandomizedTestMeasurementDataset(Dataset):
