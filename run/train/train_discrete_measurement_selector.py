@@ -9,8 +9,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
-from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized
-from src.model_optimized import LSTMDiscreteMeasurementSelectorNoMeasurements
+# from src.model import LSTMDiscreteMeasurementSelector, LSTMDiscreteMeasurementSelectorOptimized
+from src.model_optimized import LSTMDiscreteMeasurementSelectorNoMeasurements, LSTMDiscreteMeasurementSelector
 from src.train import train_discrete_measurement_selector, train_optimized_discrete_measurement_selector
 from src.test_model import test_discrete_measurement_selector
 from src.log import log_metrics_to_file, plot_metrics_from_file
@@ -32,7 +32,7 @@ def main():
     # pretrained_model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_frozen_measurements_1_epoch'
     # pretrained_model_save_path = f'./models/{num_qubits}qbits/{pretrained_model_name}.pt'
 
-    model_name = 'discrete_no_measurements_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased'
+    model_name = 'discrete_optimized-v2_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased'
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -46,9 +46,9 @@ def main():
         'max_num_measurements': 4**num_qubits
     }
 
-    model = LSTMDiscreteMeasurementSelectorNoMeasurements(**model_params)
+    # model = LSTMDiscreteMeasurementSelectorNoMeasurements(**model_params)
     # model = LSTMDiscreteMeasurementSelectorOptimized(**model_params)
-    # model = LSTMDiscreteMeasurementSelector(**model_params)
+    model = LSTMDiscreteMeasurementSelector(**model_params)
     # model.load(pretrained_model_save_path)
 
     # train & test model

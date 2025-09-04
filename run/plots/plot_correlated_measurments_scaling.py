@@ -19,11 +19,13 @@ def main():
     num_qubits = 3
     # set paths 
     log_path_lstm = f'./logs/{num_qubits}qbits/full_lstm_measure_basis_meauremnt_dependence.log'
+    log_path_lstm_random = f'./logs/{num_qubits}qbits/lstm_reconstructor.log'
     log_path_pinv_gammas = f'./logs/{num_qubits}qbits/density_matrix_reconstructor_from_pinv_gammas.log'
     log_path_corections_predictor = f'./logs/{num_qubits}qbits/tomography_corrections_predictor.log'
     log_path_corections_predictor_hs1024 = f'./logs/{num_qubits}qbits/tomography_corrections_predictor_hs1024.log'
     log_path_stack_lstm = f'./logs/{num_qubits}qbits/full_lstm_measure_basis_stacked_input+hs256_no_bases_loss_meauremnt_dependence.log'
     log_path_stack_1024_lstm = f'./logs/{num_qubits}qbits/full_lstm_measure_basis_stacked_input-hs1024_no_bases_loss_measurement_dependence.log'
+    log_path_discrete_no_measurements_lstm = f'./logs/{num_qubits}qbits/discrete_no_measurements_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased_measurement_dependence.log'
 
     plot_path = './plots/3_qbits_correlated_measurements_error_bures_log.png'
 
@@ -41,9 +43,11 @@ def main():
     metrics_lstm = load_metrics_from_file(log_path_lstm)
     metrics_stack_lstm = load_metrics_from_file(log_path_stack_lstm)
     metrics_stack_1024_lstm = load_metrics_from_file(log_path_stack_1024_lstm)
+    metrics_lstm_random = load_metrics_from_file(log_path_lstm_random)
     metrics_pinv_gammas = load_metrics_from_file(log_path_pinv_gammas)
     metrics_corrections_predictor = load_metrics_from_file(log_path_corections_predictor)
     metrics_corrections_predictor_hs1024 = load_metrics_from_file(log_path_corections_predictor_hs1024)
+    metrics_discrete_no_measurements_lstm = load_metrics_from_file(log_path_discrete_no_measurements_lstm)
 
     plt.rcParams.update({'font.size': 12})
     # fig, ax = plt.subplots()
@@ -55,6 +59,8 @@ def main():
     # plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm[metric_to_plot], color='r', marker='s', markevery=2, markersize=5, linestyle=':', fillstyle='none', label='LSTM with\nadjusted basis')
     # plt.plot(np.arange(1, 4**num_qubits+1), metrics_stack_lstm[metric_to_plot], color='g', marker='x', markevery=2, markersize=5, linestyle='--', fillstyle='none', label='Stacked LSTM with\nadjusted basis')
     plt.plot(np.arange(1, 4**num_qubits+1), metrics_stack_1024_lstm[metric_to_plot], color='r', marker='s', markevery=2, markersize=5, linestyle=':', fillstyle='none', label='LSTM with\nadjusted basis')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm_random[new_metric_name], color='m', marker='*', markevery=2, markersize=5, linestyle='--', fillstyle='none', label='LSTM with random basis')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_discrete_no_measurements_lstm[metric_to_plot], color='purple', marker='h', markevery=2, linestyle=(0, (3, 6)), markersize=5, fillstyle='none', label='LSTM with James et al. basis\n(basis only)')
 
     # plt.xticks(np.arange(1, 4**num_qubits+1))
     # plt.title('Bures distance for reconstructed density matrix')

@@ -67,7 +67,7 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
 
 if __name__ == '__main__':
     num_repetitions = 10
-    min_num_measurements = 61
+    min_num_measurements = 65
     max_num_measurements = 256
     step = 4
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
@@ -102,7 +102,7 @@ if __name__ == '__main__':
         used_measurements = []
         num_possible_measurements = comb(len(Kwiat.basis)**num_qubits, num_measurements)
         
-        iteration = 1
+        iteration = 0
         while (iteration < num_repetitions) or (num_successes < 2):        
             if len(used_measurements) == num_possible_measurements:
                 break

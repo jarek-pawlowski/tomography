@@ -723,3 +723,47 @@ def test_lstm_reconstructor(
             metrics[name][f'measurement {i}'] /= len(test_loader)
             print(f'{name} - measurement {i}: {metrics[name][f"measurement {i}"]:.4f}')
     return metrics
+
+
+def test_combined_lstm(
+    model: nn.Module,
+    device: torch.device,
+    test_loader: DataLoader,
+    criterions: t.Dict[str, t.Callable],
+) -> t.Dict[str, float]:
+
+    model.train()
+    model.to(device)
+
+    bases = [
+        torch.from_numpy(base).to(device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases).view(model.max_num_measurements, -1).to(device)
+    qubits_bases = torch.cat((qubits_bases.real, qubits_bases.imag), dim=-1)
+
+    metrics = {name: {f'measurement {i}': 0 for i in range(model.max_num_measurements)} for name in criterions.keys()}
+    test_loss = 0.
+
+    for rho, measurement, _ in tqdm(test_loader, desc='Testing model...'):
+        rho, measurement = rho.to(device), measurement.to(device)
+        qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1)
+
+        loss, batch_metrics = model(measurement, qubits_bases_batch, rho, criterions=criterions)
+
+        test_loss += loss.item()
+
+        for name, batch_metric in batch_metrics.items():
+            for measurement_id, metric_value in batch_metric.items():
+                metrics[name][measurement_id] += metric_value.item()
+
+
+    test_loss /= len(test_loader)
+    for name in metrics.keys():
+        for measurement_id in metrics[name].keys():
+            metrics[name][measurement_id] /= len(test_loader)
+
+    metrics["test_loss"] = test_loss
+
+    return metrics

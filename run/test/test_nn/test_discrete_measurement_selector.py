@@ -12,35 +12,40 @@ from torch.utils.data import DataLoader
 
 from src.tomography_utils_numpy import Kwiat
 from src.datasets import MeasurementDataset
-from src.model import LSTMDiscreteMeasurementSelector
+# from src.model import LSTMDiscreteMeasurementSelector
+from src.model_optimized import LSTMDiscreteMeasurementSelectorNoMeasurements, LSTMDiscreteMeasurementSelector
 from src.criterions import torch_bures_distance
 from src.log import log_metrics_to_file, plot_metrics_from_file
 
 
 def main():
     # load data
-    batch_size = 128
-    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True)
+    batch_size = 64
+    num_qubits = 2
+    test_dataset = MeasurementDataset(root_path=f'./data/val/', return_density_matrix=True, num_qubits=num_qubits)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
 
     # create model
-    model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
-    model_save_path = f'./models/{model_name}.pt'
+    # model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_10_noisy_epochs'
+    # model_save_path = f'./models/{model_name}.pt'
+    model_name = 'discrete_optimized-v2_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased'
+    model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     
     model_params = {
-        'num_qubits': 2,
+        'num_qubits': num_qubits,
         'possible_basis_matrices': basis_matrices, # 'Kwiat' basis matrices
-        'layers': 6,
-        'hidden_size': 128,
-        'max_num_measurements': 16
+        'layers': 2,  # 6
+        'hidden_size': 256,  # 128
+        'max_num_measurements': 4**num_qubits
     }
+    # model = LSTMDiscreteMeasurementSelectorNoMeasurements(**model_params)
     model = LSTMDiscreteMeasurementSelector(**model_params)
     model.load(model_save_path)
 
     # train & test model
-    log_path = f'./logs/{model_name}_measuremnt_dependence.log'
+    log_path = f'./logs/{num_qubits}qbits/{model_name}_measurement_dependence.log'
     criterion = nn.MSELoss()
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
     criterions = {
