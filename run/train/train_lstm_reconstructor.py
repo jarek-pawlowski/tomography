@@ -3,6 +3,8 @@ import sys
 sys.path.append('./')
 import os
 
+import pickle
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,8 +14,9 @@ from torch.multiprocessing import Queue, Process, set_start_method
 from src.criterions import torch_bures_distance
 from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
 from src.model import LSTMDensityMatrixReconstructor
-from src.train import train_lstm_reconstructor
-from src.test_model import test_lstm_reconstructor
+from src.model_optimized import LSTMReconstructor
+from src.train import train_lstm_reconstructor, train_lstm_reconstructor_optimized
+from src.test_model import test_lstm_reconstructor, test_lstm_reconstructor_optimized
 from src.log import log_metrics_to_file, plot_metrics_from_file
 from src.tomography_utils_numpy import Kwiat
 
@@ -40,13 +43,13 @@ def calculate_single_run_metrics(
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    batch_size = 64
+    batch_size = 512
     train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
     test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    model_name = 'lstm_reconstructor'
+    model_name = 'lstm_reconstructor_optimized'
     model_name = f'{model_name}_mid{mid}'
 
     sys.stdout = open(f"./logs/debug/{model_name}.log", 'w')
@@ -55,14 +58,16 @@ def calculate_single_run_metrics(
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
     
     model_params = {
-        'input_dim': 2 * (num_qubits*4) + 1,
+        # 'input_dim': 2 * (num_qubits*4) + 1,
         'num_qubits': num_qubits,
-        'layers': 2,
-        'hidden_size': 1024,
-        'bias': True
+        # 'layers': 2,
+        'hidden_size': 256,
+        'max_num_measurements': 4**num_qubits,
+        # 'bias': True
     }
 
-    model = LSTMDensityMatrixReconstructor(**model_params)
+    # model = LSTMDensityMatrixReconstructor(**model_params)
+    model = LSTMReconstructor(**model_params)
 
     # train & test model
     log_path = f'./logs/{dir_name}/{model_name}.log'
@@ -72,21 +77,26 @@ def calculate_single_run_metrics(
     criterion = nn.MSELoss()
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
     criterions = {
-        'test_loss': criterion,
+        'test_loss_m': criterion,
     }
 
     measurements_order_t = torch.tensor(measurements_order, device=device)
 
     best_test_loss = float('inf')
     for epoch in range(1, num_epochs + 1):
-        train_metrics = train_lstm_reconstructor(model, device, train_loader, reconstructor_optimizer, epoch, measurements_order_t, criterion=criterion, log_interval=10, std_out=sys.stdout)
-        test_metrics = test_lstm_reconstructor(model, device, test_loader, criterions, measurements_order_t, std_out=sys.stdout)
-        if test_metrics['test_loss'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
-            best_test_loss = test_metrics['test_loss'][f'measurement {4**num_qubits - 1}']
+        # train_metrics = train_lstm_reconstructor(model, device, train_loader, reconstructor_optimizer, epoch, measurements_order_t, criterion=criterion, log_interval=10, std_out=sys.stdout)
+        train_metrics = train_lstm_reconstructor_optimized(model, device, train_loader, reconstructor_optimizer, measurements_order_t, epoch, log_interval=10, std_out=sys.stdout)
+        # test_metrics = test_lstm_reconstructor(model, device, test_loader, criterions, measurements_order_t, std_out=sys.stdout)
+        test_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions, std_out=sys.stdout)
+        test_loss_total = test_metrics.pop('test_loss')
+        # make test_metrics flat        
+        
+        if test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
+            best_test_loss = test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}']
             model.save(model_save_path)
         # make test_metrics flat
         test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}
-        metrics = {**train_metrics, **test_metrics}
+        metrics = {**train_metrics, **test_metrics, 'test_loss_sum': test_loss_total}
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
     plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
@@ -94,15 +104,16 @@ def calculate_single_run_metrics(
 
     # Final evaluation
     final_criterions = {
-        'test_loss': criterion,
+        'test_loss_m': criterion,
         'bures_distance': bures_distance
     }
 
     model.load(model_save_path)
-    best_metrics = test_lstm_reconstructor(model, device, test_loader, final_criterions, measurements_order_t, std_out=sys.stdout)
+    best_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions=final_criterions, std_out=sys.stdout)
+    test_loss_total = best_metrics.pop('test_loss')
 
     test_loss_t = [
-        best_metrics['test_loss'][f'measurement {i}'] for i in range(4**num_qubits)
+        best_metrics['test_loss_m'][f'measurement {i}'] for i in range(4**num_qubits)
     ]
     bures_distance_t = [
         best_metrics['bures_distance'][f'measurement {i}'] for i in range(4**num_qubits)
@@ -114,7 +125,8 @@ def calculate_single_run_metrics(
 
     result_metrics = {
         'test_loss_avg': test_loss_t,
-        'bures_distance_avg': bures_distance_t
+        'bures_distance_avg': bures_distance_t,
+        'test_loss_sum': test_loss_total
     }
     result_queue.put(result_metrics)
 
@@ -125,12 +137,13 @@ if __name__ == '__main__':
     except RuntimeError:
         pass
 
-    num_repetitions = 3
+    num_repetitions = 5
     num_qubits = 4
     num_measurements = 4 ** num_qubits
-    log_path = f'./logs/{num_qubits}qbits/lstm_reconstructor.log'
+    log_path = f'./logs/{num_qubits}qbits/lstm_reconstructor_optimized.log'
 
-    dir_name = f'{num_qubits}qbits/lstm_reconstructor'
+    dir_name = f'{num_qubits}qbits/lstm_reconstructor_optimized'
+    
     # Parent-side accumulators
     queue = Queue()
 
@@ -141,7 +154,12 @@ if __name__ == '__main__':
 
     # queue.put(metrics)
 
+    measurements_save_path = f'./models/{dir_name}/measurement_sets.pkl'
+    os.makedirs(os.path.dirname(measurements_save_path), exist_ok=True)
+    
     measurement_sets = generate_random_measurements_subsets(num_repetitions, num_qubits)
+    pickle.dump(measurement_sets, open(measurements_save_path, 'wb'))
+    
     processes = [Process(target=calculate_single_run_metrics, args=(queue, i, dir_name, num_qubits, measurement_sets[i])) for i in range(num_repetitions)]
 
     for p in processes:

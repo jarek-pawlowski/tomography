@@ -767,3 +767,53 @@ def test_combined_lstm(
     metrics["test_loss"] = test_loss
 
     return metrics
+
+
+def test_lstm_reconstructor_optimized(
+    model: nn.Module,
+    device: torch.device,
+    test_loader: DataLoader,
+    measurements_order: torch.Tensor,
+    criterions: t.Dict[str, t.Callable] = {},
+    std_out: t.Optional[t.IO] = None,
+) -> t.Dict[str, float]:
+
+    model.train()
+    model.to(device)
+
+    bases = [
+        torch.from_numpy(base).to(device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases).view(model.max_num_measurements, -1).to(device)
+    qubits_bases = torch.cat((qubits_bases.real, qubits_bases.imag), dim=-1)
+
+    metrics = {name: {f'measurement {i}': 0 for i in range(model.max_num_measurements)} for name in criterions.keys()}
+    test_loss = 0.
+
+    for rho, measurement, _ in tqdm(test_loader, desc='Testing model...', file=std_out):
+        rho, measurement = rho.to(device), measurement.to(device)
+        qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1)
+
+        measurements_order_ = measurements_order.to(device).unsqueeze(0).expand(rho.shape[0], -1)
+        qubits_bases_ordered = torch.gather(qubits_bases_batch, 1, measurements_order_.unsqueeze(-1).expand(-1, -1, qubits_bases_batch.shape[-1]))  # shape (batch, max_num_measurements, num_qubits*2*2*2)
+        measurement_ordered = torch.gather(measurement, 1, measurements_order_)  # shape (batch, max_num_measurements)
+
+        loss, batch_metrics = model(measurement_ordered, qubits_bases_ordered, rho, criterions=criterions)
+
+        test_loss += loss.item()
+
+        for name, batch_metric in batch_metrics.items():
+            for measurement_id, metric_value in batch_metric.items():
+                metrics[name][measurement_id] += metric_value.item()
+
+
+    test_loss /= len(test_loader)
+    for name in metrics.keys():
+        for measurement_id in metrics[name].keys():
+            metrics[name][measurement_id] /= len(test_loader)
+
+    metrics["test_loss"] = test_loss
+
+    return metrics

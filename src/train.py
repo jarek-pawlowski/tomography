@@ -819,3 +819,51 @@ def train_combined_lstm(
 
     metrics['train_loss'] /= len(train_loader)
     return metrics
+
+
+def train_lstm_reconstructor_optimized(
+    model: nn.Module,
+    device: torch.device,
+    train_loader: DataLoader,
+    optimizer: Optimizer,
+    measurements_order: torch.Tensor,
+    epoch: int,
+    log_interval: int = 100,
+    std_out: t.Optional[t.IO] = None,
+) -> t.Dict[str, float]:
+
+    model.train()
+    model.to(device)
+
+    metrics = {'train_loss': 0}
+
+    bases = [
+        torch.from_numpy(base).to(device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases).view(model.max_num_measurements, -1).to(device)
+    qubits_bases = torch.cat((qubits_bases.real, qubits_bases.imag), dim=-1)
+
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f'Train Epoch: {epoch}', file=std_out)
+    for batch_idx, (rho, measurement, _) in pbar:
+        optimizer.zero_grad()
+        rho, measurement = rho.to(device), measurement.to(device)
+        qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1)
+        
+        measurements_order_ = measurements_order.to(device).unsqueeze(0).expand(rho.shape[0], -1)
+        qubits_bases_ordered = torch.gather(qubits_bases_batch, 1, measurements_order_.unsqueeze(-1).expand(-1, -1, qubits_bases_batch.shape[-1]))  # shape (batch, max_num_measurements, num_qubits*2*2*2)
+        measurement_ordered = torch.gather(measurement, 1, measurements_order_)  # shape (batch, max_num_measurements)
+
+        loss, _ = model(measurement_ordered, qubits_bases_ordered, rho)
+
+        loss.backward()
+        optimizer.step()
+
+        metrics['train_loss'] += loss.item()
+
+        if batch_idx % log_interval == 0:
+            pbar.set_postfix({'train_loss': metrics['train_loss'] / (batch_idx + 1)})
+
+    metrics['train_loss'] /= len(train_loader)
+    return metrics

@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
-from src.model_optimized import CombinedLSTMDiscreteMeasurementSelector
+from src.model_optimized import CombinedLSTMDiscreteMeasurementSelector, CombinedLSTMMeasurementPredictor
 from src.train import train_combined_lstm
 from src.test_model import test_combined_lstm
 from src.log import log_metrics_to_file, plot_metrics_from_file
@@ -20,7 +20,7 @@ from src.tomography_utils_numpy import Kwiat
     
 def main():
     # load data
-    batch_size = 1024
+    batch_size = 512
     num_qubits = 3
     train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
     test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
@@ -29,7 +29,9 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    model_name = 'combined_lstm_discrete_unique_measurement_selector_no_measurements'
+    # model_name = 'combined_lstm_discrete_unique_measurement_selector_no_measurements_measure_basis_memory'
+    model_name = 'combined_lstm2_semi_rand_measurement_predictor_measure_memory'
+
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -37,17 +39,23 @@ def main():
         'num_qubits': num_qubits,
         'hidden_size': 256,
         'max_num_measurements': 4**num_qubits,
-        'selection_measurements': False
+        'selection_measurements': True,
+        'num_layers': 2,
+        'measurements_weights': False,
+        # 'temperature': 1.
     }
 
-    model = CombinedLSTMDiscreteMeasurementSelector(**model_params)
+    model = CombinedLSTMMeasurementPredictor(**model_params)
+    # model = CombinedLSTMDiscreteMeasurementSelector(**model_params)
 
     # train & test model
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     
-    num_epochs = 40
+    num_epochs = 80
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30], gamma=0.1)
+    
     criterion = nn.MSELoss()
     criterions = {
         'test_loss_m': criterion
@@ -74,6 +82,9 @@ def main():
         }
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
+
+        scheduler.step()
+    
     plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
 
 

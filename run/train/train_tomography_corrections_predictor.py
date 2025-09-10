@@ -44,12 +44,12 @@ def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: Da
         'num_measurements': measurement_subset_len,
         'num_gammas': 4**num_qubits,
         'layers': 2,
-        'hidden_size': 64, # 1024
+        'hidden_size': 1024, # 1024
     }
     # model = TomographyM2CorrectionsPredictor(**model_params)
     model = TomographyCorrectionsPredictor(**model_params)
 
-    model_name = 'mlp_tomography_corrections_predictor'
+    model_name = 'mlp_tomography_corrections_predictor_hs1024'
     model_name = f'{model_name}_mid{mid}'
     model_save_path = f'./models/{dir_name}/{model_name}.pt'
 
@@ -145,9 +145,9 @@ def generate_random_measurements_subsets(num_measurements: int, num_repetitions:
 if __name__ == '__main__':
     num_repetitions = 5
     num_qubits = 4
-    min_num_measurements = 17
+    min_num_measurements = 1
     max_num_measurements = 256
-    step = 4
+    step = 16
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
     num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
 
@@ -167,7 +167,7 @@ if __name__ == '__main__':
         actual_num_repetitions = min(num_repetitions, num_possible_measurements)
 
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'{num_qubits}qbits/tomography_corrections_predictor_m{num_measurements}'
+        dir_name = f'{num_qubits}qbits/tomography_corrections_predictor_hs1024_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),
