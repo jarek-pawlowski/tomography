@@ -19,11 +19,11 @@ from src.tomography_utils_torch import calculate_concurrence_from_measurements
 from src.log import log_metrics_to_file, plot_metrics_from_file, plot_metrics_from_files
 
 batch_size = 512
-test_dataset = MeasurementDataset(root_path='./data/val/')
+test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', num_qubits=3)
 # test_dataset = VectorDensityMatrixDataset(root_path='./data/val/')
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-plot_path = f'./plots/2qbits_concurrence_binary_distribution.png'
+plot_path = f'./plots/3qbits_concurrence_binary_distribution.png'
 
 device = torch.device('cpu')
 

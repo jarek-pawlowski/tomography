@@ -39,7 +39,7 @@ def main():
     log_path_discrete_measurement_basis_tomography_corrections_lstm = './logs/tomo_corrections_discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_measurement_dependence.log'
     log_path_mean_reconstruction = './logs/2qbit/density_matrix_reconstructor_from_mean.log'
 
-    plot_path = './plots/correlated_measurements_error_bures_new_final_seminar.png'
+    plot_path = './plots/correlated_measurements_error_bures_final_log_fixed.png'
 
     metric_to_plot = 'bures_distance' 
     # metric_to_plot =  'test_loss'
@@ -52,8 +52,8 @@ def main():
 
 
     # load data
-    metrics_lstm = load_metrics_from_file(log_path_lstm)
-    metrics_lstm_no_selection = load_metrics_from_file(log_path_lstm_no_selection)
+    # metrics_lstm = load_metrics_from_file(log_path_lstm)
+    metrics_lstm = load_metrics_from_file(log_path_lstm_no_selection)
     metrics_smp = load_metrics_from_file(log_path_smp)
     metrics_kwiat_basis_lstm = load_metrics_from_file(log_path_kwiat_basis_lstm)
     metrics_discrete_kwiat_basis_lstm = load_metrics_from_file(log_path_discrete_kwiat_basis_lstm)
@@ -89,6 +89,11 @@ def main():
 
     metrics_mean_reconstruction_expanded = np.repeat(metrics_mean_reconstruction[fixed_metric_name], 16)
     
+    metrics_tomography_corrections[new_metric_name][15] = metrics_pinv_gammas[pinv_metrics_name][15]
+    metrics_tomography_corrections_basis_only[new_metric_name][15] = metrics_pinv_gammas[pinv_metrics_name][15]
+    metrics_m2_tomography_corrections_basis_only[new_metric_name][15] = metrics_pinv_gammas[pinv_metrics_name][15]
+
+
     plt.rcParams.update({'font.size': 12})
     
     # num_colors = 20
@@ -105,9 +110,9 @@ def main():
     # plt.plot(np.arange(1, 17), metrics_reconstructor[new_metric_name], label='Fully connected NN reconstructor\non random measurements')
     # plt.plot(np.arange(1, 17), metrics_smp[metric_to_plot], label='Arbitrary basis fully connected NN')
     plt.plot(np.arange(1, 17), metrics_tomography_corrections[new_metric_name], color='orange', marker='o', linestyle='-', markersize=5, fillstyle='none', label='Corrector NN')
-    # plt.plot(np.arange(1, 17), metrics_tomography_corrections_basis_only[new_metric_name], color='g', marker='x', markersize=5, linestyle='--', label='Corrector NN (basis only)')
-    # plt.plot(np.arange(1, 17), metrics_m2_tomography_corrections_basis_only[new_metric_name], color='lime', marker='|', markersize=5, linestyle=(0, (3, 3)), label='$M^2$-Corrector NN (basis only)')
-    # plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], color='darkred', marker='^', markersize=5, fillstyle='none', linestyle=(0, (1, 3)), label='LSTM with James et al. basis') # noise turned off after 10 epochs
+    plt.plot(np.arange(1, 17), metrics_tomography_corrections_basis_only[new_metric_name], color='g', marker='x', markersize=5, linestyle='--', label='Corrector NN (basis only)')
+    plt.plot(np.arange(1, 17), metrics_m2_tomography_corrections_basis_only[new_metric_name], color='lime', marker='|', markersize=5, linestyle=(0, (3, 3)), label='$M^2$-Corrector NN (basis only)')
+    plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], color='darkred', marker='^', markersize=5, fillstyle='none', linestyle=(0, (1, 3)), label='LSTM with James et al. basis') # noise turned off after 10 epochs
     plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
     # plt.plot(np.arange(1, 17), metrics_lstm_no_selection[metric_to_plot], color='magenta', marker='p', markersize=5, fillstyle='none', linestyle=(0, (2, 5)), label='LSTM with adjusted basis\n(basis only)')
     # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
@@ -120,8 +125,8 @@ def main():
     # plt.plot(np.arange(1, 17), metrics_mean_reconstruction_expanded, '--', label='Mean reconstruction')
 
     plt.xticks(np.arange(1, 17))
-    # plt.yscale('log')
-    # plt.ylim(1e-5, 3)
+    plt.yscale('log')
+    plt.ylim(1e-4, 3)
     # plt.title('Bures distance for reconstructed density matrix')
     plt.xlabel('Number of measurement outcomes')
     plt.ylabel('Bures distance') 
