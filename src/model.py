@@ -771,7 +771,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
 
 
 class LSTMDiscreteMeasurementSelectorOptimized(LSTMDiscreteMeasurementSelector):
-    def forward(self, all_measurements: t.List[t.Tuple[torch.Tensor, torch.Tensor]], rho: torch.Tensor, predict_target_basis: bool = False, add_noise_while_selecting_basis: bool = False):
+    def forward(self, all_measurements: t.List[t.Tuple[torch.Tensor, torch.Tensor]], rho: torch.Tensor, predict_target_basis: bool = False, add_noise_while_selecting_basis: bool = False, measurements_order: t.Optional[torch.Tensor] = None):
         target_measurements_with_basis = []
         for measurment_tuple in all_measurements:
             measurement, basis = measurment_tuple
@@ -785,6 +785,8 @@ class LSTMDiscreteMeasurementSelectorOptimized(LSTMDiscreteMeasurementSelector):
         c_i = torch.randn((measurement.shape[0], self.measurement_selector.hidden_size), device=measurement.device)
 
         predicted_measurements_with_basis = [target_measurements_with_basis[0]]
+        final_reconstruction_measurements_with_basis = [target_measurements_with_basis[0]]
+        
         first_measurements_basis_probability = torch.zeros(measurement.shape[0], self.num_qubits, len(self.bases), device=measurement.device)
         first_measurements_basis_probability[:, :, 0] = 1.0
         predicted_bases_probabilities = [first_measurements_basis_probability]
@@ -806,10 +808,22 @@ class LSTMDiscreteMeasurementSelectorOptimized(LSTMDiscreteMeasurementSelector):
                 dim=0 
             )
             sorted_indices = torch.argsort(probabilites, descending=True, dim=-1)
+
             measurement_predictor_input = torch.stack([
                 self._get_new_measurement_predictor_input(sorted_indices_k, used_measurement_bases_ids_k, rho_k, basis_matrices)
                 for sorted_indices_k, used_measurement_bases_ids_k, rho_k in zip(sorted_indices, used_measurement_bases_ids, rho_complex)
             ], dim=0)
+
+            # Use given measurements_order if provided (for pretraining purposes)
+            if measurements_order is not None:
+                frozen_measurements = measurements_order.expand_as(sorted_indices)
+                frozen_measurement_predictor_input = torch.stack([
+                    self._get_new_measurement_predictor_input(sorted_indices_k, used_measurement_bases_ids_k, rho_k, basis_matrices)
+                    for sorted_indices_k, used_measurement_bases_ids_k, rho_k in zip(frozen_measurements, used_measurement_bases_ids, rho_complex)
+                ], dim=0)
+                final_reconstruction_measurements_with_basis.append(frozen_measurement_predictor_input)
+            else:
+                final_reconstruction_measurements_with_basis.append(measurement_predictor_input)
 
             measurements_with_basis = torch.stack(predicted_measurements_with_basis, dim=1)
             if predict_target_basis:
@@ -836,9 +850,9 @@ class LSTMDiscreteMeasurementSelectorOptimized(LSTMDiscreteMeasurementSelector):
             total_target_basis_ids.append(target_basis_ids)
 
         predicted_bases_probabilities = torch.stack(predicted_bases_probabilities, dim=1) # shape (batch, max_num_measurements, num_qubits, len(bases))
-        predicted_measurements_with_basis = torch.stack(predicted_measurements_with_basis, dim=1)
+        final_reconstruction_measurements_with_basis = torch.stack(final_reconstruction_measurements_with_basis, dim=1)
         
-        predicted_measurements_matrices = self.matrix_reconstructor(predicted_measurements_with_basis) #.detach()) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
+        predicted_measurements_matrices = self.matrix_reconstructor(final_reconstruction_measurements_with_basis) #.detach()) # shape (batch, max_num_measurements, 2, 2**num_qubits, 2**num_qubits)
         total_target_basis_ids = torch.stack(total_target_basis_ids, dim=1) # shape (batch, max_num_measurements, 1)
         return predicted_measurements_matrices, predicted_bases_probabilities, total_target_basis_ids
     

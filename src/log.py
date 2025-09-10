@@ -13,10 +13,10 @@ def log_metrics_to_file(metrics: t.Dict[str, float], log_path: str, write_mode: 
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, write_mode) as f:
         if write_mode == 'w':
-            prefix = f'{xaxis_name}, ' if xaxis is not None else ''
+            prefix = f'{xaxis_name}{DELIMITER}' if xaxis is not None else ''
             f.write(f'{prefix}{str.join(DELIMITER, metrics.keys())}\n')
 
-        prefix = f'{xaxis}, ' if xaxis is not None else ''
+        prefix = f'{xaxis}{DELIMITER}' if xaxis is not None else ''
         metrics_values_str = map(lambda x: str(x), metrics.values())
         f.write(f'{prefix}{str.join(DELIMITER, metrics_values_str)}\n')
 

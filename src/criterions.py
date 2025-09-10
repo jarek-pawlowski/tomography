@@ -116,14 +116,14 @@ def torch_fidelity(
     rho2: torch.Tensor
 ):
     unitary1, singular_values, unitary2 = torch.linalg.svd(rho1)
-    diag_func_singular = torch.diag(torch.sqrt(singular_values)).to(torch.cdouble)
-    s1sqrt =  unitary1.matmul(diag_func_singular).matmul(unitary2)
+    diag_func_singular = torch.diag_embed(torch.sqrt(singular_values)).to(torch.cdouble)
+    s1sqrt =  unitary1 @ diag_func_singular @ unitary2
 
     unitary1, singular_values, unitary2 = torch.linalg.svd(rho2)
-    diag_func_singular = torch.diag(torch.sqrt(singular_values)).to(torch.cdouble)
-    s2sqrt =  unitary1.matmul(diag_func_singular).matmul(unitary2)
+    diag_func_singular = torch.diag_embed(torch.sqrt(singular_values)).to(torch.cdouble)
+    s2sqrt =  unitary1 @ diag_func_singular @ unitary2
 
-    fid = torch.linalg.norm(s1sqrt.matmul(s2sqrt), ord="nuc") ** 2
+    fid = torch.linalg.norm(s1sqrt @ s2sqrt, ord="nuc", dim=(-2, -1)) ** 2
     return fid.to(torch.double)
 
 
@@ -135,15 +135,19 @@ def torch_bures_distance(
     rho_input_np = torch.complex(rho_input[..., 0, :, :], rho_input[..., 1, :, :]).to(torch.cdouble)
     rho_target_np = torch.complex(rho_target[..., 0, :, :], rho_target[..., 1, :, :]).to(torch.cdouble)
 
-    bures_distances = []
-    for rho_in, rho_t in zip(rho_input_np, rho_target_np):
-        try:
-            fidelity = torch_fidelity(rho_in, rho_t)
-        except:
-            fidelity = torch.tensor(0.)
-        bures_distance = 2 * (1 - torch.sqrt(fidelity))
-        bures_distances.append(bures_distance.unsqueeze(0))
-    bures_distances = torch.stack(bures_distances)
+    fidelity = torch_fidelity(rho_input_np, rho_target_np)
+    bures_distances = 2 * (1 - torch.sqrt(fidelity))
+
+    # bures_distances = []
+    # for rho_in, rho_t in zip(rho_input_np, rho_target_np):
+    #     try:
+    #         fidelity = torch_fidelity(rho_in, rho_t)
+    #     except:
+    #         fidelity = torch.tensor(0.)
+    #     bures_distance = 2 * (1 - torch.sqrt(fidelity))
+    #     bures_distances.append(bures_distance.unsqueeze(0))
+    # bures_distances = torch.stack(bures_distances)
+    
     if reduction == 'mean':
         return bures_distances.mean()
     return bures_distances

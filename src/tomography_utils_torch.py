@@ -1,5 +1,6 @@
 from math import log2
 import typing as t
+from functools import cache
 
 import numpy as np
 import torch
@@ -15,28 +16,82 @@ def tensordot(
     moveaxis: t.Optional[t.Tuple[int, ...]] = None,
     conj_tr: t.Tuple[bool, bool] = (False, False)
 ) -> torch.Tensor:
-    
-    a = torch.conj(a.T) if conj_tr[0] else a  # warning: transposing reverses tensor indices
-    b = torch.conj(b.T) if conj_tr[1] else b  # warning: transposing reverses tensor indices
+
+    a = torch.conj(a.transpose(-1, -2)) if conj_tr[0] else a  # warning: transposing reverses tensor indices
+    b = torch.conj(b.transpose(-1, -2)) if conj_tr[1] else b  # warning: transposing reverses tensor indices
     result = torch.tensordot(a, b, indices)
     if moveaxis is not None:
         result = torch.moveaxis(result, *moveaxis)
     return result
 
-def trace(a: torch.Tensor):
+def trace(a: torch.Tensor, batch_first: bool = False):
     # performs tensor contraction Tijk...ijk...
-    dim = int(len(a.shape)/2)
+    a_shape = len(a.shape) if batch_first else len(a.shape) - 1
+    dim = int(a_shape/2)
     indices = np.indices([2]*dim).reshape(dim,-1).T
     indices_to_sum = np.tile(indices, 2)
     return torch.sum(torch.stack([a[tuple(idx)] for idx in indices_to_sum]))
 
+
 def measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, ...]) -> torch.Tensor:
-    # measure all qubits using list of operators
-    # basis_vectors = operators to use when measuring subsequent qubits
-    
+    '''
+    Assumes:
+        rho: density matrix of shape (2, 2, ..., 2), where len(shape) = num_qubits
+        basis_vectors: measurement operators for each qubit; shape (num_qubits, 2, 2)
+    '''
     Prho = rho.clone()
     for i, basis_vector in enumerate(basis_vectors):
         Prho = tensordot(basis_vector, Prho, indices=([1], [i]), moveaxis=(0,i))
+    prob = trace(Prho).real
+    return prob
+
+
+def measure_batch_kron(rho: torch.Tensor, basis_vectors: torch.Tensor) -> torch.Tensor:
+    '''
+    Alternative batch measurement using Kronecker products.
+    More memory intensive but potentially faster for small qubit counts.
+    
+    Args:
+        rho: batch of density matrices (batch_size, 2^n, 2^n) in matrix form
+        basis_vectors: batch of measurement operators (batch_size, num_qubits, 2, 2)
+    
+    Returns:
+        prob: measurement probabilities (batch_size,)
+    '''
+    batch_size, num_qubits = basis_vectors.shape[:2]
+    
+    # Compute Kronecker product for each batch element
+    # Start with first basis vector
+    measurement_ops = basis_vectors[:, 0]  # (batch_size, 2, 2)
+    
+    # Iteratively compute Kronecker products
+    for i in range(1, num_qubits):
+        next_basis = basis_vectors[:, i]  # (batch_size, 2, 2)
+        
+        # Batch Kronecker product using einsum
+        # kron(A,B)[i*n+j, k*m+l] = A[i,k] * B[j,l]
+        measurement_ops = torch.einsum('bij,bkl->bikjl', measurement_ops, next_basis)
+        measurement_ops = measurement_ops.reshape(batch_size, -1, measurement_ops.shape[-1] * measurement_ops.shape[-2])
+    
+    # Compute trace(measurement_op @ rho) for each batch
+    # Using tr(AB) = sum(A * B^T) element-wise
+    prob = torch.sum(measurement_ops * rho.transpose(-2, -1), dim=(-2, -1)).real
+    
+    return prob
+
+
+def my_measure(rho: torch.Tensor, basis_vectors: t.Tuple[torch.Tensor, ...], basis_batched: bool = False) -> torch.Tensor:
+    # measure all qubits using list of operators
+    # basis_vectors = operators to use when measuring subsequent qubits
+    Prho = rho.clone()
+    if basis_batched:
+        basis_vectors = torch.moveaxis(basis_vectors, 0, 1)
+        batch_correction = 1
+    else:
+        batch_correction = 0
+    # batch_idx = 1 if batch_first else 0
+    for i, basis_vector in enumerate(basis_vectors):
+        Prho = tensordot(basis_vector, Prho, indices=([1 + batch_correction], [i]), moveaxis=(batch_correction, i + batch_correction))
     prob = trace(Prho).real
     return prob
 
@@ -116,6 +171,17 @@ def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):
     intermediate_result = torch.einsum('ijk,nkm->injm', gammas, projection_vectors)
     B = torch.einsum('njm,injm->ni', projection_vectors_conj, intermediate_result)
     return B
+
+@cache
+def calculate_B_inv(projection_vectors: torch.Tensor, gammas: torch.Tensor, method: str = 'exact'):
+    B = calculate_B(projection_vectors, gammas)
+    if method == 'exact':
+        B_inv = torch.linalg.inv(B)
+    elif method == 'pinv':
+        B_inv = torch.linalg.pinv(B)
+    else:
+        raise ValueError(f'Unknown inverse method: {method}')
+    return B_inv
 
 def reconstruct_with_nn_corrections(
     measurements: torch.Tensor,
