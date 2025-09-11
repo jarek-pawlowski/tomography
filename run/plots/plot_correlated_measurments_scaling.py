@@ -33,7 +33,7 @@ def main():
     log_path_lstm_memory_no_measurements = f'./logs/{num_qubits}qbits/combined_lstm_measurement_predictor_no_measurements_measure_memory_measurement_dependence.log'
     log_path_lstm_memory_no_measurements_v2 = f'./logs/{num_qubits}qbits/combined_lstm_measurement_predictor_no_measurments_measure_memory_v2_measurement_dependence.log'
     log_path_lstm_memory = f'./logs/{num_qubits}qbits/combined_lstm_measurement_predictor_measure_memory_measurement_dependence.log'
-
+    log_path_lstm_2_layers_memory = f'./logs/{num_qubits}qbits/combined_lstm2_semi_rand_measurement_predictor_measure_memory_measurement_dependence.log'
 
     plot_path = './plots/3_qbits_correlated_measurements_error_bures_log.png'
 
@@ -63,6 +63,7 @@ def main():
     metrics_lstm_memory_no_measurements = load_metrics_from_file(log_path_lstm_memory_no_measurements)
     metrics_lstm_memory_no_measurements_v2 = load_metrics_from_file(log_path_lstm_memory_no_measurements_v2)
     metrics_lstm_memory = load_metrics_from_file(log_path_lstm_memory)
+    metrics_lstm_2_layers_memory = load_metrics_from_file(log_path_lstm_2_layers_memory)
 
     plt.rcParams.update({'font.size': 12})
     # fig, ax = plt.subplots()
@@ -83,6 +84,7 @@ def main():
     plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm_memory_no_measurements[metric_to_plot], color='tab:olive', marker='p', markevery=2, linestyle=':', markersize=5, fillstyle='none', label='LSTM with adjusted basis\n(basis only, with memory)')
     plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm_memory_no_measurements_v2[metric_to_plot], color='tab:orange', marker='8', markevery=2, linestyle='--', markersize=5, fillstyle='none', label='LSTM with adjusted basis\n(basis only, with memory) v2')
     plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm_memory[metric_to_plot], color='tab:brown', marker='8', markevery=2, linestyle='-.', markersize=5, fillstyle='none', label='LSTM with adjusted basis\n(with memory)')
+    plt.plot(np.arange(1, 4**num_qubits+1), metrics_lstm_2_layers_memory[metric_to_plot], color='tab:pink', marker='*', markevery=2, linestyle='-', markersize=5, fillstyle='none', label='LSTM 2 layers with adjusted basis\n(with memory)')
 
     # plt.xticks(np.arange(1, 4**num_qubits+1))
     # plt.title('Bures distance for reconstructed density matrix')

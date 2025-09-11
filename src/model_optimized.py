@@ -198,25 +198,30 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
 
 
 class LSTMCELLDiscreteMeasurementSelector(nn.Module):
-    def __init__(self, num_qubits: int , hidden_size: int = 16, max_num_measurements: int = 16, selection_measurements: bool = False, temperature: float = 1.0):
+    def __init__(self, num_qubits: int , hidden_size: int = 16, max_num_measurements: int = 16, selection_measurements: bool = False, temperature: float = 1.0, num_layers: int = 1):
         super(LSTMCELLDiscreteMeasurementSelector, self).__init__()
         self.max_num_measurements = max_num_measurements
         self.num_qubits = num_qubits
         self.basis_dim = 2 * (num_qubits*4)
         # self.rho_dim = 2 * (4 ** num_qubits)
         self.measurements_dim = 4 ** num_qubits
+        self.num_layers = num_layers
 
         self.selection_measurements = selection_measurements
         self.selector_input_dim = self.basis_dim + 1 if selection_measurements else self.basis_dim
-        self.measurement_selector = nn.LSTMCell(self.selector_input_dim, hidden_size)
+        self.measurement_selector = nn.ModuleList(
+            [nn.LSTMCell(self.selector_input_dim, hidden_size)] +
+            [nn.LSTMCell(hidden_size, hidden_size) for _ in range(num_layers - 1)]
+        )
         self.selector_projector = nn.Sequential(
             nn.Linear(hidden_size, self.max_num_measurements),
             nn.Softmax(dim=-1)
         )
         # Measure memory
-        # self.matrix_reconstructor = nn.LSTMCell(self.basis_dim + self.measurements_dim, hidden_size)
-        # Basis-measure memory
-        self.matrix_reconstructor = nn.LSTMCell(2* self.basis_dim + 1, hidden_size)
+        self.matrix_reconstructor = nn.ModuleList(
+            [nn.LSTMCell(self.basis_dim + self.max_num_measurements, hidden_size)] +
+            [nn.LSTMCell(hidden_size, hidden_size) for _ in range(num_layers - 1)]
+        )
         self.reconstructor_projector = nn.Linear(hidden_size, 2 * (4 ** num_qubits))
         self.T = temperature
 
@@ -225,59 +230,69 @@ class LSTMCELLDiscreteMeasurementSelector(nn.Module):
         measurement_id: torch.Tensor,
         measurements: torch.Tensor,
         bases: torch.Tensor,
-        selector_states: t.Tuple[torch.Tensor, torch.Tensor],
-        used_measurements_mask: torch.Tensor
+        selector_states: t.List[t.Tuple[torch.Tensor, torch.Tensor]],
+        used_measurements_mask: torch.Tensor,
+        measurements_memory: torch.Tensor,
     ):
-        current_measurement = measurements[torch.arange(measurements.shape[0]), measurement_id].unsqueeze(-1) # shape (batch, 1)
         current_basis = bases[torch.arange(bases.shape[0]), measurement_id]
 
         if self.selection_measurements:
-            selector_input = torch.cat((current_measurement, current_basis), dim=-1)
+            selector_input = torch.cat((measurements_memory, current_basis), dim=-1)
         else:
             selector_input = current_basis
 
-        new_selector_states = self.measurement_selector(selector_input, selector_states)
-        proposed_basis_probabilities = self.selector_projector(new_selector_states[0]) # shape (batch, max_num_measurements)
+        multilayer_selector_states = []
+        for i in range(self.num_layers):
+            new_selector_states = self.measurement_selector[i](selector_input, selector_states[i])
+            selector_input = new_selector_states[0]
+            multilayer_selector_states.append(new_selector_states)
+
+        proposed_basis_probabilities = self.selector_projector(multilayer_selector_states[-1][0]) # shape (batch, max_num_measurements)
         proposed_basis_probabilities = F.softmax(proposed_basis_probabilities / self.T, dim=-1)
         masked_probabilities = proposed_basis_probabilities * used_measurements_mask
         renormalized_masked_probabilities = masked_probabilities / (masked_probabilities.sum(dim=-1, keepdim=True) + 1e-8)
         proposed_measurement_id = torch.argmax(renormalized_masked_probabilities, dim=-1) # shape (batch,)
 
-        return proposed_measurement_id, renormalized_masked_probabilities, new_selector_states
+        measurements_memory = measurements_memory.clone()
+        measurements_memory[torch.arange(measurements.shape[0]), proposed_measurement_id] = measurements[torch.arange(measurements.shape[0]), proposed_measurement_id]
+        return proposed_measurement_id, renormalized_masked_probabilities, multilayer_selector_states, measurements_memory
     
 
     def reconstructor_forward(
         self,
-        proposed_measurement_id: torch.Tensor,
         proposed_measurement_probabilities: torch.Tensor,
-        measurements: torch.Tensor,
         bases: torch.Tensor,
-        reconstructor_states: t.Tuple[torch.Tensor, torch.Tensor],
+        reconstructor_states: t.List[t.Tuple[torch.Tensor, torch.Tensor]],
         measurements_memory: torch.Tensor,
         # global_memory: torch.Tensor,
     ):
-        proposed_measurement = measurements[torch.arange(measurements.shape[0]), proposed_measurement_id].unsqueeze(-1) # shape (batch, 1)
-        
-        measure_basis_memory = (measurements_memory.unsqueeze(-1) * bases).sum(dim=-2) # shape (batch, num_qubits*2*2*2)
+        # measure_basis_memory = (measurements_memory.unsqueeze(-1) * bases).sum(dim=-2) # shape (batch, num_qubits*2*2*2)
 
         soft_basis = (proposed_measurement_probabilities.unsqueeze(-1) * bases).sum(dim=-2) # shape (batch, num_qubits*2*2*2)
         # memory_squeezed = global_memory.view(global_memory.shape[0], -1)  # shape (batch, rho_dim)
-        reconstructor_input = torch.cat((measure_basis_memory, soft_basis, proposed_measurement), dim=-1)
+        reconstructor_input = torch.cat((measurements_memory, soft_basis), dim=-1)
 
-        new_reconstructor_states = self.matrix_reconstructor(reconstructor_input, reconstructor_states)
-        predicted_rho = self.reconstructor_projector(new_reconstructor_states[0]).view(-1, 2, 2**self.num_qubits, 2**self.num_qubits)
+        multilayer_reconstructor_states = []
+        for i in range(self.num_layers):
+            new_reconstructor_states = self.matrix_reconstructor[i](reconstructor_input, reconstructor_states[i])
+            reconstructor_input = new_reconstructor_states[0]
+            multilayer_reconstructor_states.append(new_reconstructor_states)
 
-        measurements_memory = measurements_memory.clone()
-        measurements_memory[torch.arange(measurements.shape[0]), proposed_measurement_id] = proposed_measurement.squeeze(-1) # shape (batch, max_num_measurements)
+        predicted_rho = self.reconstructor_projector(multilayer_reconstructor_states[-1][0]).view(-1, 2, 2**self.num_qubits, 2**self.num_qubits)
 
-        return predicted_rho, new_reconstructor_states, measurements_memory
+        return predicted_rho, multilayer_reconstructor_states
     
     def initialize_hidden_states(self, batch_size: int, device: torch.device):
-        selector_hidden_state = torch.zeros(batch_size, self.measurement_selector.hidden_size, device=device)
-        selector_cell_state = torch.zeros(batch_size, self.measurement_selector.hidden_size, device=device)
-        reconstructor_hidden_state = torch.zeros(batch_size, self.matrix_reconstructor.hidden_size, device=device)
-        reconstructor_cell_state = torch.zeros(batch_size, self.matrix_reconstructor.hidden_size, device=device)
-        return (selector_hidden_state, selector_cell_state), (reconstructor_hidden_state, reconstructor_cell_state)
+        multilayer_selector_states = []
+        multilayer_reconstructor_states = []
+        for i in range(self.num_layers):
+            selector_hidden_state = torch.zeros(batch_size, self.measurement_selector[i].hidden_size, device=device)
+            selector_cell_state = torch.zeros(batch_size, self.measurement_selector[i].hidden_size, device=device)
+            reconstructor_hidden_state = torch.zeros(batch_size, self.matrix_reconstructor[i].hidden_size, device=device)
+            reconstructor_cell_state = torch.zeros(batch_size, self.matrix_reconstructor[i].hidden_size, device=device)
+            multilayer_selector_states.append((selector_hidden_state, selector_cell_state))
+            multilayer_reconstructor_states.append((reconstructor_hidden_state, reconstructor_cell_state))
+        return multilayer_selector_states, multilayer_reconstructor_states
 
     def forward(
         self,
@@ -302,18 +317,17 @@ class LSTMCELLDiscreteMeasurementSelector(nn.Module):
             measurements_memory: Tensor of shape (batch, max_num_measurements)
         '''
 
-        proposed_measurement_id, proposed_basis_probabilities, new_selector_states = self.selector_forward(
+        proposed_measurement_id, proposed_basis_probabilities, new_selector_states, measurements_memory = self.selector_forward(
             measurement_id,
             measurements,
             bases,
             selector_states,
-            used_measurements_mask
+            used_measurements_mask,
+            measurements_memory
         )
 
-        predicted_rho, new_reconstructor_states, measurements_memory = self.reconstructor_forward(
-            proposed_measurement_id,
+        predicted_rho, new_reconstructor_states = self.reconstructor_forward(
             proposed_basis_probabilities,
-            measurements,
             bases,
             reconstructor_states,
             measurements_memory
@@ -330,11 +344,11 @@ class LSTMCELLDiscreteMeasurementSelector(nn.Module):
 
 
 class CombinedLSTMDiscreteMeasurementSelector(nn.Module):
-    def __init__(self, num_qubits: int , hidden_size: int = 16, max_num_measurements: int = 16, selection_measurements: bool = False, temperature: float = 1.0):
+    def __init__(self, num_qubits: int , hidden_size: int = 16, max_num_measurements: int = 16, selection_measurements: bool = False, temperature: float = 1.0, num_layers: int = 1):
         super().__init__()
         self.max_num_measurements = max_num_measurements
         self.num_qubits = num_qubits
-        self.lstm_cell = LSTMCELLDiscreteMeasurementSelector(num_qubits, hidden_size, max_num_measurements, selection_measurements, temperature)
+        self.lstm_cell = LSTMCELLDiscreteMeasurementSelector(num_qubits, hidden_size, max_num_measurements, selection_measurements, temperature, num_layers)
         # self.memory_selector = nn.Conv2d(4, 2, kernel_size=1)
 
     def forward(
@@ -353,13 +367,12 @@ class CombinedLSTMDiscreteMeasurementSelector(nn.Module):
         proposed_measurement_id = torch.full((measurements.shape[0],), first_measurement_id, dtype=torch.int64, device=measurements.device)
 
         measurements_memory = torch.zeros_like(measurements)
+        measurements_memory[torch.arange(measurements.shape[0]), proposed_measurement_id] = measurements[torch.arange(measurements.shape[0]), proposed_measurement_id]
 
         # global_memory = torch.zeros_like(rho)
 
-        predicted_rho, reconstructor_states, measurements_memory = self.lstm_cell.reconstructor_forward(
-            proposed_measurement_id,
+        predicted_rho, reconstructor_states = self.lstm_cell.reconstructor_forward(
             init_measurement_probabilities,
-            measurements,
             bases,
             init_reconstructor_states,
             measurements_memory
@@ -624,12 +637,16 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
 
 
 class LSTMReconstructor(nn.Module):
-    def __init__(self, num_qubits: int, hidden_size: int = 16, max_num_measurements: int = 16):
+    def __init__(self, num_qubits: int, hidden_size: int = 16, max_num_measurements: int = 16, num_layers: int = 1):
         super(LSTMReconstructor, self).__init__()
         self.max_num_measurements = max_num_measurements
         self.num_qubits = num_qubits
         self.basis_dim = 2 * (num_qubits*4)
-        self.matrix_reconstructor = nn.LSTMCell(self.basis_dim + self.max_num_measurements, hidden_size)
+        self.num_layers = num_layers
+        self.matrix_reconstructor = nn.ModuleList(
+            [nn.LSTMCell(self.basis_dim + self.max_num_measurements, hidden_size)] +
+            [nn.LSTMCell(hidden_size, hidden_size) for _ in range(num_layers - 1)]
+        )
         self.reconstructor_projector = nn.Linear(hidden_size, 2 * (4 ** num_qubits))
 
     def forward(
@@ -652,8 +669,15 @@ class LSTMReconstructor(nn.Module):
 
             reconstructor_input = torch.cat((measurements_memory, current_basis), dim=-1)
 
-            reconstructor_states = self.matrix_reconstructor(reconstructor_input, reconstructor_states)
-            predicted_rho = self.reconstructor_projector(reconstructor_states[0]).view(-1, 2, 2**self.num_qubits, 2**self.num_qubits)
+            multilayer_reconstructor_states = []
+            for j in range(self.num_layers):
+                new_reconstructor_states = self.matrix_reconstructor[j](reconstructor_input, reconstructor_states[j])
+                reconstructor_input = new_reconstructor_states[0]
+                multilayer_reconstructor_states.append(new_reconstructor_states)
+            
+            reconstructor_states = multilayer_reconstructor_states
+
+            predicted_rho = self.reconstructor_projector(multilayer_reconstructor_states[-1][0]).view(-1, 2, 2**self.num_qubits, 2**self.num_qubits)
 
             loss = loss + F.mse_loss(predicted_rho, rho)
 
@@ -663,9 +687,12 @@ class LSTMReconstructor(nn.Module):
         return loss, metrics
     
     def initialize_hidden_states(self, batch_size: int, device: torch.device):
-        reconstructor_hidden_state = torch.zeros(batch_size, self.matrix_reconstructor.hidden_size, device=device)
-        reconstructor_cell_state = torch.zeros(batch_size, self.matrix_reconstructor.hidden_size, device=device)
-        return (reconstructor_hidden_state, reconstructor_cell_state)
+        multilayer_reconstructor_states = []
+        for i in range(self.num_layers):
+            reconstructor_hidden_state = torch.zeros(batch_size, self.matrix_reconstructor[i].hidden_size, device=device)
+            reconstructor_cell_state = torch.zeros(batch_size, self.matrix_reconstructor[i].hidden_size, device=device)
+            multilayer_reconstructor_states.append((reconstructor_hidden_state, reconstructor_cell_state))
+        return multilayer_reconstructor_states
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)

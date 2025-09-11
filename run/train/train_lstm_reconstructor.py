@@ -44,12 +44,12 @@ def calculate_single_run_metrics(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     batch_size = 512
-    train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    model_name = 'lstm_reconstructor_optimized'
+    model_name = 'lstm2_reconstructor_optimized'
     model_name = f'{model_name}_mid{mid}'
 
     sys.stdout = open(f"./logs/debug/{model_name}.log", 'w')
@@ -63,6 +63,7 @@ def calculate_single_run_metrics(
         # 'layers': 2,
         'hidden_size': 256,
         'max_num_measurements': 4**num_qubits,
+        'num_layers': 2,
         # 'bias': True
     }
 
@@ -138,11 +139,11 @@ if __name__ == '__main__':
         pass
 
     num_repetitions = 5
-    num_qubits = 4
+    num_qubits = 3
     num_measurements = 4 ** num_qubits
-    log_path = f'./logs/{num_qubits}qbits/lstm_reconstructor_optimized.log'
+    log_path = f'./logs/{num_qubits}qbits/lstm2_reconstructor_optimized.log'
 
-    dir_name = f'{num_qubits}qbits/lstm_reconstructor_optimized'
+    dir_name = f'{num_qubits}qbits/lstm2_reconstructor_optimized'
     
     # Parent-side accumulators
     queue = Queue()

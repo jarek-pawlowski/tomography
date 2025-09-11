@@ -29,8 +29,8 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-    # model_name = 'combined_lstm_discrete_unique_measurement_selector_no_measurements_measure_basis_memory'
-    model_name = 'combined_lstm2_semi_rand_measurement_predictor_measure_memory'
+    model_name = 'combined_lstm2_discrete_unique_measurement_selector_no_measurements_measure_memory'
+    # model_name = 'combined_lstm2_semi_rand_measurement_predictor_measure_memory'
 
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
@@ -39,14 +39,13 @@ def main():
         'num_qubits': num_qubits,
         'hidden_size': 256,
         'max_num_measurements': 4**num_qubits,
-        'selection_measurements': True,
+        'selection_measurements': False,
         'num_layers': 2,
-        'measurements_weights': False,
         # 'temperature': 1.
     }
 
-    model = CombinedLSTMMeasurementPredictor(**model_params)
-    # model = CombinedLSTMDiscreteMeasurementSelector(**model_params)
+    # model = CombinedLSTMMeasurementPredictor(**model_params)
+    model = CombinedLSTMDiscreteMeasurementSelector(**model_params)
 
     # train & test model
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
