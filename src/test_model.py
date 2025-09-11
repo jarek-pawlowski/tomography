@@ -732,7 +732,7 @@ def test_combined_lstm(
     criterions: t.Dict[str, t.Callable],
 ) -> t.Dict[str, float]:
 
-    model.train()
+    model.eval()
     model.to(device)
 
     bases = [
@@ -778,7 +778,7 @@ def test_lstm_reconstructor_optimized(
     std_out: t.Optional[t.IO] = None,
 ) -> t.Dict[str, float]:
 
-    model.train()
+    model.eval()
     model.to(device)
 
     bases = [
