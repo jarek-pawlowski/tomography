@@ -8,8 +8,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.tomography_utils_torch import measure
-from src.tomography_utils_numpy import Kwiat
+from src.tomography_utils_torch import calculate_B, calculate_B_inv, measure
+from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Gammas, Kwiat, Kwiat_projectors
+from src.train import reconstruct_rho_from_corrections_vectorized, reconstruct_rho_from_corrections
+
 
 def collect_rhos_with_closest_kwiat_bases(
     model: nn.Module,
@@ -192,3 +194,72 @@ def calculate_cumulative_model_output_varying_feature(
     if batch_aggregate == 'sum':
         cumulative_output = cumulative_output.sum().item()
     return cumulative_output
+
+
+def reconstruct_from_tomography_corrections_predictor(
+    measurement: torch.Tensor,
+    model: nn.Module,
+    num_qubits: int,
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+    model_input_info: str = 'full', # 'full', 'measurement' or 'measurement_basis'
+) -> torch.Tensor:
+
+    single_qubits_basis_matrices = [torch.tensor(basis, dtype=torch.complex64, device=measurement.device) for basis in Kwiat.basis]
+    n_qubits_basis_matrices = torch.stack([torch.stack(multi_qubit_base) for multi_qubit_base in product(single_qubits_basis_matrices, repeat=num_qubits)])
+    selected_basis_matrices = n_qubits_basis_matrices
+    # selected_basis_matrices = torch.stack([torch.stack([basis1, basis2]) for basis1, basis2 in product(single_qubits_basis_matrices, repeat=2)])
+
+
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=measurement.device) for basis in Kwiat_projectors.basis]
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+    selected_projection_vectors = n_qubits_projection_vectors
+    # selected_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+
+
+    if measurements_subset is not None:
+        selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
+        selected_basis_matrices = n_qubits_basis_matrices[measurements_subset]
+        measurement = measurement[:, measurements_subset]
+
+    selected_basis_matrices = selected_basis_matrices.unsqueeze(0).expand(measurement.shape[0], -1, -1, -1, -1) # expand for batch dimension
+    basis_as_vector = torch.stack((selected_basis_matrices.real, selected_basis_matrices.imag), dim=-1).view(-1, selected_basis_matrices.shape[1]*num_qubits*2*2*2)
+    if model_input_info == 'full':
+        measurement_predictor_input = torch.cat((measurement, basis_as_vector), dim=-1)
+    elif model_input_info == 'measurement':
+        measurement_predictor_input = measurement
+    elif model_input_info == 'measurement_basis':
+        measurement_predictor_input = basis_as_vector
+    else:
+        raise ValueError(f'Unknown model_input_info: {model_input_info}')
+
+    gammas = torch.tensor(Gammas, dtype=torch.complex64, device=measurement.device)
+    # gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=measurement.device)
+
+    with torch.no_grad():
+        B_inv = calculate_B_inv(selected_projection_vectors, gammas, method = 'pinv').detach()
+
+    B_inv_expand = B_inv.unsqueeze(0).expand(measurement.shape[0], -1, -1).to(measurement.device)
+
+    inverse_corrections, r_corrections = model(measurement_predictor_input)
+
+    complex_inverse_corrections = torch.complex(inverse_corrections[:, 0], inverse_corrections[:, 1])
+    complex_r_corrections = torch.complex(r_corrections[:, 0], r_corrections[:, 1])
+
+    reconstructed_rho = reconstruct_rho_from_corrections_vectorized(gammas, measurement, complex_inverse_corrections, complex_r_corrections, B_inv_expand)
+    # reconstructed_rho = reconstruct_rho_from_corrections(selected_projection_vectors, gammas, measurement, complex_inverse_corrections, complex_r_corrections)
+
+    return reconstructed_rho
+
+
+def reconstruct_from_measurement_predictor(
+    measurement: torch.Tensor,
+    rho: torch.Tensor,
+    model: nn.Module,
+    measurement_idx: int,
+) -> torch.Tensor:
+
+    basis = torch.from_numpy(Kwiat.basis[0]).to(measurement.device).to(torch.complex64)
+    basis = basis.unsqueeze(0).expand(measurement.shape[0], -1, -1)
+    measurement_with_basis = (measurement[:, 0:1], torch.stack([basis]*model.num_qubits, dim=1))
+    predicted_rhos, _ = model(measurement_with_basis, rho)
+    return predicted_rhos[:, measurement_idx]

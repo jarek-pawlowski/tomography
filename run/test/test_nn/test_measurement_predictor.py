@@ -51,7 +51,7 @@ def main():
     model.load(model_save_path, map_location=torch.device('cpu'))
 
     # train & test model
-    log_path = f'./logs/{num_qubits}qbits/{model_name}_measurement_dependence.log'
+    log_path = f'./logs/{num_qubits}qbits/{model_name}_measurement_dependence_test.log'
     criterion = nn.MSELoss()
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
     criterions = {

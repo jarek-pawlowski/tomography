@@ -21,9 +21,9 @@ from src.tomography_utils_numpy import Kwiat
 def main():
     # load data
     batch_size = 512
-    num_qubits = 3
-    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    num_qubits = 4
+    train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
     # train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
     # test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -51,7 +51,7 @@ def main():
     log_path = f'./logs/{num_qubits}qbits/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     
-    num_epochs = 80
+    num_epochs = 50
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30], gamma=0.1)
     
@@ -61,31 +61,31 @@ def main():
     }
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    best_test_loss = float('inf')
-    for epoch in range(1, num_epochs + 1):
-        train_metrics = train_combined_lstm(model, device, train_loader, optimizer, epoch, log_interval=10)
-        test_metrics = test_combined_lstm(model, device, test_loader, criterions)
+    # best_test_loss = float('inf')
+    # for epoch in range(1, num_epochs + 1):
+    #     train_metrics = train_combined_lstm(model, device, train_loader, optimizer, epoch, log_interval=10)
+    #     with torch.no_grad():
+    #         test_metrics = test_combined_lstm(model, device, test_loader, criterions)
         
-        if test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
-            best_test_loss = test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}']
-            model.save(model_save_path)
+    #     if test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}'] < best_test_loss:
+    #         best_test_loss = test_metrics['test_loss_m'][f'measurement {4**num_qubits - 1}']
+    #         model.save(model_save_path)
 
-        test_loss_total = test_metrics.pop('test_loss')
-        # make test_metrics flat
-        test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}
+    #     test_loss_total = test_metrics.pop('test_loss')
+    #     # make test_metrics flat
+    #     test_metrics = {f'{name}_{subname}': value for name, metrics in test_metrics.items() for subname, value in metrics.items()}
         
-        metrics = {
-            **train_metrics,
-            'test_loss_sum': test_loss_total,
-            **test_metrics
-        }
-        write_mode = 'w' if epoch == 1 else 'a'
-        log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
+    #     metrics = {
+    #         **train_metrics,
+    #         'test_loss_sum': test_loss_total,
+    #         **test_metrics
+    #     }
+    #     write_mode = 'w' if epoch == 1 else 'a'
+    #     log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
 
-        scheduler.step()
+    #     scheduler.step()
     
-    plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
-
+    # plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
 
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
 
@@ -96,7 +96,8 @@ def main():
     final_log_path = f'./logs/{num_qubits}qbits/{model_name}_measurement_dependence.log'
 
     model.load(model_save_path)
-    best_metrics = test_combined_lstm(model, device, test_loader, final_criterions)
+    with torch.no_grad():
+        best_metrics = test_combined_lstm(model, device, test_loader, final_criterions)
 
     for i in range(model_params['max_num_measurements']):
         write_mode = 'w' if i == 0 else 'a'

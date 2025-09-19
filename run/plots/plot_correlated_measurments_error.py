@@ -57,8 +57,8 @@ def main():
 
 
     # load data
-    # metrics_lstm = load_metrics_from_file(log_path_lstm)
-    metrics_lstm = load_metrics_from_file(log_path_lstm_no_selection)
+    metrics_lstm = load_metrics_from_file(log_path_lstm)
+    # metrics_lstm = load_metrics_from_file(log_path_lstm_no_selection)
     metrics_random_lstm = load_metrics_from_file(log_path_lstm_random_selection)
     metrics_smp = load_metrics_from_file(log_path_smp)
     metrics_kwiat_basis_lstm = load_metrics_from_file(log_path_kwiat_basis_lstm)
@@ -125,8 +125,8 @@ def main():
     plt.plot(np.arange(1, 17), metrics_m2_tomography_corrections_basis_only[new_metric_name], color='lime', marker='|', markersize=5, linestyle=(0, (3, 3)), label='$M^2$-Corrector NN (basis only)')
     plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], color='darkred', marker='^', markersize=5, fillstyle='none', linestyle=(0, (1, 3)), label='LSTM with James et al. basis') # noise turned off after 10 epochs
     # plt.plot(np.arange(1, 17), metrics_discrete_no_measurements_lstm[metric_to_plot], color='purple', marker='h', linestyle=(0, (3, 6)), markersize=5, fillstyle='none', label='LSTM with James et al. basis\n(basis only)')
-    plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
     plt.plot(np.arange(1, 17), metrics_random_lstm[new_metric_name], color='m', marker='*', markersize=5, linestyle='--', fillstyle='none', label='LSTM with random basis')
+    plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
     # plt.plot(np.arange(1, 17), metrics_lstm_no_selection[metric_to_plot], color='magenta', marker='p', markersize=5, fillstyle='none', linestyle=(0, (2, 5)), label='LSTM with adjusted basis\n(basis only)')
     # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
     # plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')
@@ -134,9 +134,9 @@ def main():
     # plt.plot(np.arange(1, 17), metrics_discrete_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis')
     # plt.plot(np.arange(1, 17), metrics_discrete_noise_break_kwiat_basis_lstm[metric_to_plot], label='LSTM from discrete Kwiat basis, noise turned off after 10 epochs')
 
-    plt.plot(np.arange(1, 17), metrics_combined_lstm[metric_to_plot], color='brown', marker='8', markersize=5, fillstyle='none', linestyle=(0, (1, 1)), label='LSTM with James et al. basis\n(soft reconstruction)')
-    plt.plot(np.arange(1, 17), metrics_combined_lstm_it2[metric_to_plot], color='darkorange', marker='4', markersize=5, fillstyle='none', linestyle=(0, (5, 1)), label='LSTM with James et al. basis\n(soft reconstruction) it2')
-    plt.plot(np.arange(1, 17), metrics_combined_lstm_no_measurements[metric_to_plot], color='darkgreen', marker='3', markersize=5, fillstyle='none', linestyle=(0, (3, 1, 1, 1)), label='LSTM with James et al. basis\n(soft reconstruction, basis only)')
+    # plt.plot(np.arange(1, 17), metrics_combined_lstm[metric_to_plot], color='brown', marker='8', markersize=5, fillstyle='none', linestyle=(0, (1, 1)), label='LSTM with James et al. basis\n(soft reconstruction)')
+    # plt.plot(np.arange(1, 17), metrics_combined_lstm_it2[metric_to_plot], color='darkorange', marker='4', markersize=5, fillstyle='none', linestyle=(0, (5, 1)), label='LSTM with James et al. basis\n(soft reconstruction) it2')
+    # plt.plot(np.arange(1, 17), metrics_combined_lstm_no_measurements[metric_to_plot], color='darkgreen', marker='3', markersize=5, fillstyle='none', linestyle=(0, (3, 1, 1, 1)), label='LSTM with James et al. basis\n(soft reconstruction, basis only)')
 
     # plt.plot(np.arange(1, 17), metrics_discrete_measurement_basis_tomography_corrections_lstm[fixed_metric_name], label='Tomography corrections LSTM predictor from discrete unique Kwiat basis')
     # plt.plot(np.arange(1, 17), metrics_mean_reconstruction_expanded, '--', label='Mean reconstruction')
@@ -147,7 +147,7 @@ def main():
     # plt.title('Bures distance for reconstructed density matrix')
     plt.xlabel('Number of measurement outcomes')
     plt.ylabel('Bures distance') 
-    plt.legend(prop={'size': 5}) #bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.legend(prop={'size': 9}) #bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.savefig(plot_path, bbox_inches='tight', dpi=1000)
 
 if __name__ == '__main__':

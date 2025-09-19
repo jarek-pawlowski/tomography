@@ -1,9 +1,12 @@
+from sys import prefix
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from src.log import DELIMITER
 
+import os
 import typing as t
 
 
@@ -68,3 +71,29 @@ def generate_mean_sample(
     samples = torch.cat(samples, dim=0)
     mean_sample = torch.mean(samples, dim=0)
     return mean_sample
+
+
+def generate_eigvals(
+    data_loader: DataLoader,
+    reconstruction_fn: t.Callable,
+    save_path: str,
+    device: torch.device
+):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    headers = [f'eig{i}' for i in range(1, 2**(data_loader.dataset.num_qubits) + 1)]
+    
+    with open(save_path, 'w') as f:
+        f.write(f'{str.join(DELIMITER, headers)}\n')
+
+    for rho, measurement, _ in tqdm(data_loader, 'Generating eigvals...'):
+        with torch.no_grad():
+            measurement = measurement.to(device)
+            rho = rho.to(device)
+            reconstructed_rho = reconstruction_fn(measurement, rho)
+            predicted_rho_complex = reconstructed_rho[..., 0, :, :] + 1j * reconstructed_rho[..., 1, :, :]
+            eigs = torch.linalg.eigvalsh(predicted_rho_complex)
+            eigs = eigs.cpu().numpy()
+
+        with open(save_path, 'a') as f:
+            for i in range(eigs.shape[0]):
+                f.write(f'{str.join(DELIMITER, [str(eig) for eig in eigs[i]])}\n')
