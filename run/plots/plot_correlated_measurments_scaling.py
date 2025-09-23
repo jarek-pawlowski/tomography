@@ -96,7 +96,7 @@ def main():
     # plt.title('Bures distance for reconstructed density matrix')
     plt.yscale('log')
     plt.ylim(1e-2, 1e-0)
-    plt.xlabel('Number of measurement outcomes')
+    plt.xlabel('Number of measurement outcomes $M$')
     plt.ylabel('Bures distance') 
     plt.legend(prop={'size': 9}, loc='lower left') #bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.savefig(plot_path, bbox_inches='tight', dpi=1000)

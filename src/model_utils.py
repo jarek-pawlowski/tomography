@@ -263,3 +263,23 @@ def reconstruct_from_measurement_predictor(
     measurement_with_basis = (measurement[:, 0:1], torch.stack([basis]*model.num_qubits, dim=1))
     predicted_rhos, _ = model(measurement_with_basis, rho)
     return predicted_rhos[:, measurement_idx]
+
+
+def reconstruct_from_combined_lstm_memory(
+    measurement: torch.Tensor,
+    rho: torch.Tensor,
+    model: nn.Module,
+    measurement_idx: int,
+) -> torch.Tensor:
+
+    bases = [
+        torch.from_numpy(base).to(measurement.device).to(torch.complex64)
+        for base in Kwiat.basis
+    ]
+    qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
+    qubits_bases = torch.stack(qubits_bases).view(model.max_num_measurements, -1).to(measurement.device)
+    qubits_bases = torch.cat((qubits_bases.real, qubits_bases.imag), dim=-1)
+    qubits_bases_batch = qubits_bases.unsqueeze(0).expand(rho.shape[0], -1, -1)
+
+    _, _, predicted_rhos = model(measurement, qubits_bases_batch, rho, return_rhos=True)
+    return predicted_rhos[:, measurement_idx]

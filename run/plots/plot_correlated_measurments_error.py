@@ -17,7 +17,10 @@ from src.log import load_metrics_from_file
 
 def main():
     # set paths 
+    log_path_tomo_attention_nn = './logs/2qbits/tomo_attention_nn.log'
+    log_path_tomo_attention_nn_larger_noise = './logs/2qbits/tomo_attention_nn_larger_noise.log'
     log_path_lstm_random_selection = './logs/2qbits/lstm_reconstructor.log'
+    log_path_lstm_2layers_random_selection = './logs/2qbits/lstm2_reconstructor_optimized.log'
     log_path_lstm = './logs/full_lstm_measure_basis_meauremnt_dependence.log'
     log_path_lstm_no_selection = './logs/2qbits/full_lstm_measure_basis_no_measurement_for_selection_meauremnt_dependence.log'
     log_path_smp = './logs/smp_measure_basis_meauremnt_dependence.log'
@@ -43,6 +46,9 @@ def main():
     log_path_combined_lstm = './logs/2qbits/combined_lstm_discrete_unique_measurement_selector_measurement_dependence.log'
     log_path_combined_lstm_it2 = './logs/2qbits/combined_lstm_discrete_unique_measurement_selector_it2_measurement_dependence.log'
     log_path_combined_lstm_no_measurements = './logs/2qbits/combined_lstm_discrete_unique_measurement_selector_no_measurements_measurement_dependence.log'
+    log_path_combined_lstm_memory = './logs/2qbits/combined_lstm_semi_rand_measurement_predictor_measure_memory_measurement_dependence.log'
+    log_path_combined_lstm2_memory = './logs/2qbits/combined_lstm2_semi_rand_measurement_predictor_measure_memory_measurement_dependence.log'
+
 
     plot_path = './plots/correlated_measurements_error_bures_final_log_fixed.png'
 
@@ -57,9 +63,12 @@ def main():
 
 
     # load data
+    metrics_tomo_attention_nn = load_metrics_from_file(log_path_tomo_attention_nn)
+    metrics_tomo_attention_nn_larger_noise = load_metrics_from_file(log_path_tomo_attention_nn_larger_noise)
     metrics_lstm = load_metrics_from_file(log_path_lstm)
     # metrics_lstm = load_metrics_from_file(log_path_lstm_no_selection)
     metrics_random_lstm = load_metrics_from_file(log_path_lstm_random_selection)
+    metrics_random_lstm2 = load_metrics_from_file(log_path_lstm_2layers_random_selection)
     metrics_smp = load_metrics_from_file(log_path_smp)
     metrics_kwiat_basis_lstm = load_metrics_from_file(log_path_kwiat_basis_lstm)
     metrics_discrete_kwiat_basis_lstm = load_metrics_from_file(log_path_discrete_kwiat_basis_lstm)
@@ -83,7 +92,8 @@ def main():
     metrics_combined_lstm = load_metrics_from_file(log_path_combined_lstm)
     metrics_combined_lstm_it2 = load_metrics_from_file(log_path_combined_lstm_it2)
     metrics_combined_lstm_no_measurements = load_metrics_from_file(log_path_combined_lstm_no_measurements)
-
+    metrics_combined_lstm_memory = load_metrics_from_file(log_path_combined_lstm_memory)
+    metrics_combined_lstm2_memory = load_metrics_from_file(log_path_combined_lstm2_memory)
 
     # add metric for all correct measurements in tomography
     # tomography_fixed_metrics = np.insert(metrics_tomography[fixed_metric_name], 0, 0)
@@ -104,6 +114,7 @@ def main():
     metrics_tomography_corrections_basis_only[new_metric_name][15] = metrics_pinv_gammas[pinv_metrics_name][15]
     metrics_m2_tomography_corrections_basis_only[new_metric_name][15] = metrics_pinv_gammas[pinv_metrics_name][15]
 
+    plt.figure(figsize=(6,6))
 
     plt.rcParams.update({'font.size': 12})
     
@@ -117,16 +128,21 @@ def main():
     plt.plot(np.arange(1, 17), metrics_pinv_gammas[pinv_metrics_name], color='b', marker='h', markersize=5, fillstyle='none', linestyle='-.', label='Tomography with\npseudoinverse')
     plt.plot(np.arange(1, 17), mle_fixed_metrics, color='k', marker='D', markersize=5, fillstyle='none', linestyle=((0, (5, 1, 2, 1))), label='MLE')
     plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, color='c', marker='v', markersize=5, fillstyle='none', linestyle=((0, (3, 4))), label='MLE (with intensity)')
+
+    # plt.plot(metrics_tomo_attention_nn['num measurements'], metrics_tomo_attention_nn[fixed_metric_name], color='tab:orange', marker='o', markersize=5, fillstyle='none', linestyle='-', label='Tomography corrections NN (small noise)')
+    plt.plot(metrics_tomo_attention_nn_larger_noise['num measurements'], metrics_tomo_attention_nn_larger_noise[fixed_metric_name], color='tab:gray', marker='p', markersize=5, fillstyle='none', linestyle=(0, (5, 1)), label='Attention NN by Palmieri et al.')
+
     # plt.plot(np.arange(1, 17), metrics_basis_gammas[new_metric_name], label='Tomography with measurement projector gammas')
     # plt.plot(np.arange(1, 17), metrics_reconstructor[new_metric_name], label='Fully connected NN reconstructor\non random measurements')
     # plt.plot(np.arange(1, 17), metrics_smp[metric_to_plot], label='Arbitrary basis fully connected NN')
     plt.plot(np.arange(1, 17), metrics_tomography_corrections[new_metric_name], color='orange', marker='o', linestyle='-', markersize=5, fillstyle='none', label='Corrector NN')
     plt.plot(np.arange(1, 17), metrics_tomography_corrections_basis_only[new_metric_name], color='g', marker='x', markersize=5, linestyle='--', label='Corrector NN (basis only)')
     plt.plot(np.arange(1, 17), metrics_m2_tomography_corrections_basis_only[new_metric_name], color='lime', marker='|', markersize=5, linestyle=(0, (3, 3)), label='$M^2$-Corrector NN (basis only)')
+    plt.plot(np.arange(1, 17), metrics_random_lstm[new_metric_name], color='m', marker='*', markersize=5, linestyle='--', fillstyle='none', label='LSTM with random basis')
+    # plt.plot(np.arange(1, 17), metrics_random_lstm2[new_metric_name], color='brown', marker='8', markersize=5, linestyle='--', fillstyle='none', label='2-layer LSTM with random basis')
     plt.plot(np.arange(1, 17), metrics_discrete_noise_break_unique_kwiat_basis_lstm[metric_to_plot], color='darkred', marker='^', markersize=5, fillstyle='none', linestyle=(0, (1, 3)), label='LSTM with James et al. basis') # noise turned off after 10 epochs
     # plt.plot(np.arange(1, 17), metrics_discrete_no_measurements_lstm[metric_to_plot], color='purple', marker='h', linestyle=(0, (3, 6)), markersize=5, fillstyle='none', label='LSTM with James et al. basis\n(basis only)')
-    plt.plot(np.arange(1, 17), metrics_random_lstm[new_metric_name], color='m', marker='*', markersize=5, linestyle='--', fillstyle='none', label='LSTM with random basis')
-    plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
+    # plt.plot(np.arange(1, 17), metrics_lstm[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
     # plt.plot(np.arange(1, 17), metrics_lstm_no_selection[metric_to_plot], color='magenta', marker='p', markersize=5, fillstyle='none', linestyle=(0, (2, 5)), label='LSTM with adjusted basis\n(basis only)')
     # plt.plot(np.arange(1, 17), metrics_kwiat_basis_lstm[metric_to_plot], label='Arbitrary basis LSTM with Kwiat basis loss')
     # plt.plot(np.arange(1, 17), metrics_lin_comb_lstm[metric_to_plot], label='LSTM with linear combination of Kwiat basis')
@@ -140,12 +156,14 @@ def main():
 
     # plt.plot(np.arange(1, 17), metrics_discrete_measurement_basis_tomography_corrections_lstm[fixed_metric_name], label='Tomography corrections LSTM predictor from discrete unique Kwiat basis')
     # plt.plot(np.arange(1, 17), metrics_mean_reconstruction_expanded, '--', label='Mean reconstruction')
+    plt.plot(np.arange(1, 17), metrics_combined_lstm_memory[metric_to_plot], color='r', marker='s', markersize=5, linestyle=':', fillstyle='none', label='LSTM with adjusted basis')
+    # plt.plot(np.arange(1, 17), metrics_combined_lstm_memory[metric_to_plot], color='tab:olive', marker='p', markersize=5, linestyle='--', fillstyle='none', label='1-layer LSTM with adjusted basis')
 
     plt.xticks(np.arange(1, 17))
     plt.yscale('log')
-    plt.ylim(1e-4, 3)
+    plt.ylim(1e-3, 2)
     # plt.title('Bures distance for reconstructed density matrix')
-    plt.xlabel('Number of measurement outcomes')
+    plt.xlabel('Number of measurement outcomes $M$')
     plt.ylabel('Bures distance') 
     plt.legend(prop={'size': 9}) #bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     plt.savefig(plot_path, bbox_inches='tight', dpi=1000)

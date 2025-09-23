@@ -26,7 +26,7 @@ def tensordot(
 
 def trace(a: torch.Tensor, batch_first: bool = False):
     # performs tensor contraction Tijk...ijk...
-    a_shape = len(a.shape) if batch_first else len(a.shape) - 1
+    a_shape = (len(a.shape) - 1) if batch_first else len(a.shape)
     dim = int(a_shape/2)
     indices = np.indices([2]*dim).reshape(dim,-1).T
     indices_to_sum = np.tile(indices, 2)

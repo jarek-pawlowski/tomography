@@ -44,8 +44,8 @@ def calculate_single_run_metrics(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     batch_size = 128
-    train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    train_dataset = MeasurementDataset(root_path='./data/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True, num_qubits=num_qubits)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, prefetch_factor=2)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2, prefetch_factor=2)
 
@@ -140,8 +140,8 @@ if __name__ == '__main__':
     except RuntimeError:
         pass
 
-    num_repetitions = 4
-    num_qubits = 4
+    num_repetitions = 5
+    num_qubits = 2
     num_measurements = 4 ** num_qubits
     log_path = f'./logs/{num_qubits}qbits/lstm2_reconstructor_optimized.log'
 

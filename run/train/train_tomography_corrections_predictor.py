@@ -49,7 +49,7 @@ def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: Da
     # model = TomographyM2CorrectionsPredictor(**model_params)
     model = TomographyCorrectionsPredictor(**model_params)
 
-    model_name = 'mlp_tomography_corrections_predictor_hs1024'
+    model_name = 'mlp_tomography_corrections_predictor_l6'
     model_name = f'{model_name}_mid{mid}'
     model_save_path = f'./models/{dir_name}/{model_name}.pt'
 
@@ -93,17 +93,18 @@ def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: Da
             regularization_weight=1. if simplifed_training else 0.1,
             use_m2_corrections=False
         )
-        test_metrics = test_tomography_corrections_predictor(
-            model,
-            device,
-            test_loader,
-            criterions,
-            measurements_subset=list(measurement_subset),
-            model_input_info=model_input_info,
-            std_out=sys.stdout,
-            trace_normalization=simplifed_training,
-            use_m2_corrections=False
-        )
+        with torch.no_grad():
+            test_metrics = test_tomography_corrections_predictor(
+                model,
+                device,
+                test_loader,
+                criterions,
+                measurements_subset=list(measurement_subset),
+                model_input_info=model_input_info,
+                std_out=sys.stdout,
+                trace_normalization=simplifed_training,
+                use_m2_corrections=False
+            )
         # matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
         if test_metrics['test_loss'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']
@@ -147,12 +148,12 @@ if __name__ == '__main__':
     num_qubits = 4
     min_num_measurements = 1
     max_num_measurements = 256
-    step = 16
+    step = 8
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
     num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
 
     model_input_info = 'full'
-    log_path = f'./logs/{num_qubits}qbits/tomography_corrections_predictor_hs1024.log'
+    log_path = f'./logs/{num_qubits}qbits/tomography_corrections_predictor_l6.log'
     simplifed_training = False
 
     batch_size = 64
@@ -167,7 +168,7 @@ if __name__ == '__main__':
         actual_num_repetitions = min(num_repetitions, num_possible_measurements)
 
         print(f'Running for {num_measurements} measurements')
-        dir_name = f'{num_qubits}qbits/tomography_corrections_predictor_hs1024_m{num_measurements}'
+        dir_name = f'{num_qubits}qbits/tomography_corrections_predictor_l6_m{num_measurements}'
         metrics = {
             'test_loss_avg': 0,
             'test_loss_min': float('inf'),

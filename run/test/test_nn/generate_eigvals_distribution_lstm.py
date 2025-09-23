@@ -1,8 +1,9 @@
 import torch
 from src.datasets import MeasurementDataset
 from src.data_utils import generate_eigvals
-from src.model_utils import reconstruct_from_measurement_predictor
+from src.model_utils import reconstruct_from_measurement_predictor, reconstruct_from_combined_lstm_memory
 from src.model import LSTMMeasurementPredictor
+from src.model_optimized import CombinedLSTMMeasurementPredictor
 
 from torch.utils.data import DataLoader
 
@@ -11,21 +12,36 @@ num_qubits = 2
 max_num_measurements = 4**num_qubits
 
 model_input_info = 'full'
-eigvals_save_prefix = f'./logs/2qbits/eigvals/full_lstm_measurement_predictor'
+eigvals_save_prefix = f'./logs/2qbits/eigvals/combined_lstm2_measurement_predictor_measure_memory'
 
-model_name = 'full_lstm_measure_basis'
-model_save_path = f'./models/{model_name}.pt'
+# model_name = 'full_lstm_measure_basis'
+# model_save_path = f'./models/{model_name}.pt'
 
+# model_params = {
+#     'num_qubits': num_qubits,
+#     'layers': 6,
+#     'hidden_size': 128,
+#     'max_num_measurements': 4**num_qubits
+# }
+
+model_name = 'combined_lstm2_semi_rand_measurement_predictor_measure_memory'
+model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
+   
 model_params = {
     'num_qubits': num_qubits,
-    'layers': 6,
-    'hidden_size': 128,
-    'max_num_measurements': 4**num_qubits
+    'hidden_size': 256,
+    'max_num_measurements': 4**num_qubits,
+    'selection_measurements': True,
+    'num_layers': 2,
+    # 'temperature': 1.
 }
+
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model = LSTMMeasurementPredictor(**model_params)
+# model = LSTMMeasurementPredictor(**model_params)
+model = CombinedLSTMMeasurementPredictor(**model_params)
 model.load(model_save_path)
 model.eval()
 model.to(device)
@@ -48,7 +64,7 @@ for num_measurements in range(1, max_num_measurements + 1):
 
     generate_eigvals(
         test_loader,
-        reconstruction_fn=lambda measurement, rho: reconstruct_from_measurement_predictor(
+        reconstruction_fn=lambda measurement, rho: reconstruct_from_combined_lstm_memory(
             measurement, rho, model, num_measurements - 1),
         save_path=f'{eigvals_save_prefix}_m{num_measurements}.log',
         device=device
