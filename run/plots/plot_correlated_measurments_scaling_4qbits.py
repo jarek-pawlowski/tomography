@@ -58,9 +58,9 @@ def main():
     plt.plot(metrics_corrections_predictor[xaxis_name], metrics_corrections_predictor[new_metric_name], color='orange', marker='o', linestyle='-', markersize=6, markevery=1, fillstyle='none', label='Corrector NN')
     # plt.plot(metrics_corrections_hs_1024_predictor[xaxis_name], metrics_corrections_hs_1024_predictor[new_metric_name], color='green', marker='s', linestyle='-', markersize=6, fillstyle='none', label='Corrector NN HS1024')
     # plt.plot(metrics_lstm_hs1024_random_basis[xaxis_name], metrics_lstm_hs1024_random_basis[new_metric_name], color='red', marker='^', linestyle='-', markevery=8, markersize=5, fillstyle='none', label='LSTM 2 layers HS1024 with random basis\n(with memory)')
-    # plt.plot(metrics_lstm_2_layers_memory[xaxis_name], metrics_lstm_2_layers_memory[metric_to_plot], color='purple', marker='v', linestyle='-', markevery=8, markersize=5, fillstyle='none', label='LSTM 2 layers with adjusted basis\n(with memory)')
     plt.plot(metrics_lstm_random_basis[xaxis_name], metrics_lstm_random_basis[new_metric_name], color='m', marker='*', linestyle='-', markevery=8, markersize=5, fillstyle='none', label='LSTM with random basis')
     plt.plot(metrics_lstm_2_layers_hs1024_memory[xaxis_name], metrics_lstm_2_layers_hs1024_memory[metric_to_plot], color='r', marker='s', linestyle='-', markevery=8, markersize=5, fillstyle='none', label='LSTM with adjusted basis')
+    plt.plot(metrics_lstm_2_layers_memory[xaxis_name], metrics_lstm_2_layers_memory[metric_to_plot], color='r', marker='s', linestyle=':', markevery=8, markersize=5, fillstyle='none', label='LSTM with adjusted basis\n(hs=256)')
     # plt.plot(metrics_lstm_2_layers_hs1024_no_measurements_memory[xaxis_name], metrics_lstm_2_layers_hs1024_no_measurements_memory[metric_to_plot], color='magenta', marker='*', linestyle='-', markevery=8, markersize=5, fillstyle='none', label='LSTM 2 layers with adjusted basis\n(no measurement input, with memory)')
 
     # plt.xticks(np.arange(1, 4**num_qubits+1))

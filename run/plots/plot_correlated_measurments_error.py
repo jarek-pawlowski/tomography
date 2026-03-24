@@ -102,11 +102,11 @@ def main():
     # zeroed_tomography_fixed_metrics = np.insert(metrics_zeroed_tomography[fixed_metric_name], 0, 0)
     zeroed_tomography_fixed_metrics = np.flip(metrics_zeroed_tomography[fixed_metric_name])
 
-    mle_intensity_fixed_metrics = np.insert(metrics_mle_intensity[fixed_metric_name], 0, 0)
-    mle_intensity_fixed_metrics = np.flip(mle_intensity_fixed_metrics)
+    # mle_intensity_fixed_metrics = np.insert(metrics_mle_intensity[fixed_metric_name], 0, 0)
+    mle_intensity_fixed_metrics = np.flip(metrics_mle_intensity[fixed_metric_name])
 
-    mle_fixed_metrics = np.insert(metrics_mle[fixed_metric_name], 0, 0)
-    mle_fixed_metrics = np.flip(mle_fixed_metrics)
+    # mle_fixed_metrics = np.insert(metrics_mle[fixed_metric_name], 0, 0)
+    mle_fixed_metrics = np.flip(metrics_mle[fixed_metric_name])
 
     metrics_mean_reconstruction_expanded = np.repeat(metrics_mean_reconstruction[fixed_metric_name], 16)
     
@@ -126,7 +126,7 @@ def main():
     # plt.plot(np.arange(1, 17), tomography_fixed_metrics, label='Kwiat basis tomography')
     # plt.plot(np.arange(1, 17), zeroed_tomography_fixed_metrics, label='Kwiat basis tomography with zeroed measurements')
     plt.plot(np.arange(1, 17), metrics_pinv_gammas[pinv_metrics_name], color='b', marker='h', markersize=5, fillstyle='none', linestyle='-.', label='Tomography with\npseudoinverse')
-    plt.plot(np.arange(1, 17), mle_fixed_metrics, color='k', marker='D', markersize=5, fillstyle='none', linestyle=((0, (5, 1, 2, 1))), label='MLE')
+    plt.plot(np.arange(1, 17), mle_fixed_metrics, color='midnightblue', marker='D', markersize=5, fillstyle='none', linestyle=((0, (5, 1, 2, 1))), label='MLE')
     plt.plot(np.arange(1, 17), mle_intensity_fixed_metrics, color='c', marker='v', markersize=5, fillstyle='none', linestyle=((0, (3, 4))), label='MLE (with intensity)')
 
     # plt.plot(metrics_tomo_attention_nn['num measurements'], metrics_tomo_attention_nn[fixed_metric_name], color='tab:orange', marker='o', markersize=5, fillstyle='none', linestyle='-', label='Tomography corrections NN (small noise)')

@@ -1,12 +1,13 @@
+from itertools import product
 from math import log2
 import typing as t
-from functools import cache
+from functools import cache, reduce
 
 import numpy as np
 import torch
 from qiskit.quantum_info import concurrence, DensityMatrix
 
-from src.tomography_utils_numpy import Tomography, Kwiat_projectors
+from src.tomography_utils_numpy import N_QUBIT_GAMMAS, Kwiat_library, Tomography, Kwiat_projectors, basis_for_Kwiat_code
 
 
 def tensordot(
@@ -161,6 +162,51 @@ def reconstruct(measurements: torch.Tensor, projection_vectors: torch.Tensor, ga
         eigs = torch.amin(torch.linalg.eigvalsh(rho))
         if eigs < 0.: rho -= torch.eye(rho.shape[-1])*eigs   
     return rho
+
+
+def reconstruct_from_pinv(
+    measurement: torch.Tensor,
+    num_qubits: int,
+    measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+):
+    single_qubits_projection_vectors = [torch.tensor(basis, dtype=torch.complex64, device=measurement.device) for basis in Kwiat_projectors.basis]
+    # two_qubits_projection_vectors = torch.stack([torch.kron(basis1, basis2) for basis1, basis2 in product(single_qubits_projection_vectors, repeat=2)])
+    n_qubits_projection_vectors = torch.stack([reduce(torch.kron, [basis_i for basis_i in basis]) for basis in product(single_qubits_projection_vectors, repeat=num_qubits)])
+    selected_projection_vectors = n_qubits_projection_vectors
+    gammas = torch.tensor(N_QUBIT_GAMMAS(num_qubits), dtype=torch.complex64, device=measurement.device)
+    selected_gammas = gammas
+
+    if measurements_subset is not None:
+        selected_projection_vectors = n_qubits_projection_vectors[measurements_subset]
+        measurement = measurement[:, measurements_subset]
+
+    reconstructed_rho = torch.stack([reconstruct(measurement_i, selected_projection_vectors, selected_gammas, enforce_valid_density_matrix=False, inverse='pinv') for measurement_i in measurement])
+    return torch.stack([reconstructed_rho.real, reconstructed_rho.imag], dim=-3)
+
+
+def reconstruct_from_mle(
+        measurement: torch.Tensor,
+        measurements_subset: t.Optional[t.Union[int, t.List[int]]] = None,
+        noise_variance: float = 1.
+):
+    measurements = measurement.clone().cpu()
+
+    optimized_tomography = Kwiat_library(basis_for_Kwiat_code)
+
+    if measurements_subset:
+        data_min = torch.maximum(measurements[:, torch.tensor(measurements_subset)] - noise_variance, torch.zeros_like(measurements[:, torch.tensor(measurements_subset)]))
+        data_max = torch.minimum(measurements[:, torch.tensor(measurements_subset)] + noise_variance, torch.ones_like(measurements[:, torch.tensor(measurements_subset)]))
+        interval = data_max - data_min + 1e-6
+        varied_data = torch.rand_like(interval) * interval + data_min
+        measurements[:, torch.tensor(measurements_subset)] = varied_data
+
+    rho_rec = torch.stack([
+        torch.from_numpy(
+            optimized_tomography.run_tomography(measurement.numpy(), method='MLE')
+        )
+        for measurement in measurements
+    ])
+    return torch.stack([rho_rec.real, rho_rec.imag], dim=-3)
 
 
 def calculate_B(projection_vectors: torch.Tensor, gammas: torch.Tensor):

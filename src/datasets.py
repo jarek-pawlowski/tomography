@@ -89,10 +89,15 @@ class MeasurementDataset(DensityMatrixDataset):
         self.binary_label = binary_label
         self.mask_measurements = mask_measurements
         self.measurement_subset = measurement_subset
+        self.indices = list(range(len(self.dict)))
         if data_limit is not None:
-            self.dict = self.dict[:data_limit]
+            self.indices = np.random.choice(self.indices, size=data_limit, replace=False).tolist()
+
+    def __len__(self) -> int:
+        return len(self.indices)
 
     def __getitem__(self, idx: int) -> t.Tuple[torch.Tensor, torch.Tensor]:
+        idx = self.indices[idx]
         filename = self.read_filename(idx)
         matrix = self.read_matrix(filename)
         rho = self.convert_numpy_matrix_to_tensor(matrix)

@@ -8,7 +8,7 @@ save_path = './logs/num_parameters/num_parameters.txt'
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
 
-for num_qubits in [2, 3, 4]:
+for num_qubits in [2, 3, 4, 5]:
     lstm_hs = 256 if num_qubits in [2, 3] else 1024
     n_layers = 1 if num_qubits == 2 else 2
 
@@ -17,7 +17,7 @@ for num_qubits in [2, 3, 4]:
         'hidden_size': lstm_hs,
         'max_num_measurements': 4**num_qubits,
         'selection_measurements': True,
-        'num_layers': n_layers,
+        'num_layers': 2,
     }
 
     lstm_adjusted = CombinedLSTMMeasurementPredictor(**lstm_adjusted_model_params)
@@ -30,6 +30,16 @@ for num_qubits in [2, 3, 4]:
     }
 
     lstm_random = LSTMReconstructor(**lstm_random_params)
+
+
+    lstm_random_params = {
+        'num_qubits': num_qubits,
+        'hidden_size': 256,
+        'max_num_measurements': 4**num_qubits,
+        'num_layers': 1,
+    }
+    lstm_x_random = LSTMReconstructor(**lstm_random_params)
+
 
     input_dim = num_qubits*2*2*2 + 1
     tomo_corrections_params = {
@@ -45,6 +55,7 @@ for num_qubits in [2, 3, 4]:
     models = {
         'combined_lstm_memory': lstm_adjusted,
         'random_lstm': lstm_random,
+        'random_lstm_x': lstm_x_random,
         'tomography_corrections': corrector,
     }
 

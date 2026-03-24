@@ -154,7 +154,8 @@ def test_reconstruction_from_noisy_measurements(
                 measurements[:, torch.tensor(varying_input_idx)] = varied_data
 
             predictions = []
-            for measurement in measurements:
+            targets = []
+            for measurement, rho_i in zip(measurements, rho):
                 if strategy == 'tomography':
                     if (method == 'zeroed_measurements') and (varying_input_idx is not None):
                         zero_measurements = varying_input_idx
@@ -162,27 +163,40 @@ def test_reconstruction_from_noisy_measurements(
                         zero_measurements = None
                     else:
                         raise ValueError(f'Unknown method for tomography: {method}')
-                    rho_rec = reconstruct(measurement, n_qubits_projection_vectors, gammas, enforce_valid_density_matrix=False, zero_measurements=zero_measurements).cpu().numpy()
+                    try:
+                        rho_rec = reconstruct(measurement, n_qubits_projection_vectors, gammas, enforce_valid_density_matrix=False, zero_measurements=zero_measurements).cpu().numpy()
+                    except Exception as e:
+                        print(f'Error occurred during reconstruction: {e}')
+                        continue
                 elif strategy == 'optimized_tomography':
                     intensity = None
                     if use_intensity:
                         intensity = np.ones(len(measurement))
                         if varying_input_idx is not None:
                             intensity[varying_input_idx] = 1 - noise_variance + 1e-6
-                    rho_rec = optimized_tomography.run_tomography(measurement.numpy(), method=method, intensity=intensity)
+                    try:
+                        rho_rec = optimized_tomography.run_tomography(measurement.numpy(), method=method, intensity=intensity)
+                    except Exception as e:
+                        print(f'Error occurred during optimized tomography: {e}')
+                        continue
                 else:
                     raise ValueError(f'Unknown strategy: {strategy}')
                 matrix_r = np.real(rho_rec)
                 matrix_im = np.imag(rho_rec)
                 rho_rec_t = torch.from_numpy(np.stack((matrix_r, matrix_im), axis=0)).float()
                 predictions.append(rho_rec_t)
+                targets.append(rho_i)
 
+            targets = torch.stack(targets).to(predictions[0].device)
             predictions = torch.stack(predictions)
             weights = torch.ones(predictions.shape[0]).to(predictions.device)
             if varying_input_idx is not None:
                 weights = interval.mean(dim=-1) # averaging interval for all disturbed measurements
             for name, criterion in criterions.items():
-                error = torch.flatten(criterion(predictions, rho), start_dim=1, end_dim=-1).mean(dim=-1)
+                if name == 'bures_distance':
+                    error = criterion(predictions, targets)
+                else:
+                    error = torch.flatten(criterion(predictions, targets), start_dim=1, end_dim=-1).mean(dim=-1)
                 variance_metrics[name] += ((error * weights).sum() / weights.sum()).item() / len(test_loader)
 
     return variance_metrics

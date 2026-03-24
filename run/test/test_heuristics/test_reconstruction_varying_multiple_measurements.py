@@ -24,9 +24,9 @@ num_qubits = 2
 test_dataset = MeasurementDataset(root_path='./data/val/', return_density_matrix=True, num_qubits=num_qubits)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-results_path = './logs/2qbit/mle_rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_tomography{}.log'
-avg_results_path = './logs/2qbit/mle_rho_test_varying_measurement_clipped_tomography_avg.log'
-plot_path = './plots/2qbit/mle_rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_tomography.png'
+results_path = './logs/2qbit/mle_rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_tomography_intensity_0{}.log'
+avg_results_path = './logs/2qbit/mle_rho_test_varying_measurement_clipped_tomography_avg_intensity_0.log'
+plot_path = './plots/2qbit/mle_rho_varying_multiple_measurements/rho_test_varying_measurement_clipped_tomography_intensity.png'
 
 num_measurements = 16
 num_repetitions = 10
@@ -43,9 +43,9 @@ criterions = {
 
 strategy = 'optimized_tomography'
 method = 'MLE'
-use_intensity = False
+use_intensity = True
 
-for i in range(1, num_measurements):
+for i in range(0, 1):
     print('Num measurements:', i)
     avg_metrics = {}
     used_measuerements = []
