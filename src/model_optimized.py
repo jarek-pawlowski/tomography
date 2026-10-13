@@ -167,6 +167,7 @@ class LSTMDiscreteMeasurementSelector(nn.Module):
             last_measurement_with_basis = current_measurements_with_basis[:, -1]  # shape (batch, num_qubits*2*2*2 + 1)
             h_i, c_i  = self.measurement_selector(last_measurement_with_basis, (h_i, c_i))
             proposed_basis_probabilities = self.projector(h_i) # shape (batch, max_num_measurements)
+            proposed_basis_probabilities = proposed_basis_probabilities.mean(dim=0, keepdim=True).expand(proposed_basis_probabilities.shape[0], -1)
 
             mask[torch.arange(mask.shape[0]), proposed_basis_ids[-1]] = 0.
             current_basis_probabilities = proposed_basis_probabilities * mask
@@ -208,7 +209,7 @@ class LSTMCELLDiscreteMeasurementSelector(nn.Module):
         self.num_layers = num_layers
 
         self.selection_measurements = selection_measurements
-        self.selector_input_dim = self.basis_dim + 1 if selection_measurements else self.basis_dim
+        self.selector_input_dim = self.basis_dim + self.max_num_measurements if selection_measurements else self.basis_dim
         self.measurement_selector = nn.ModuleList(
             [nn.LSTMCell(self.selector_input_dim, hidden_size)] +
             [nn.LSTMCell(hidden_size, hidden_size) for _ in range(num_layers - 1)]
@@ -248,6 +249,7 @@ class LSTMCELLDiscreteMeasurementSelector(nn.Module):
             multilayer_selector_states.append(new_selector_states)
 
         proposed_basis_probabilities = self.selector_projector(multilayer_selector_states[-1][0]) # shape (batch, max_num_measurements)
+        proposed_basis_probabilities = proposed_basis_probabilities.mean(dim=0, keepdim=True).expand(proposed_basis_probabilities.shape[0], -1)  # shape (1, num_qubits*4)
         proposed_basis_probabilities = F.softmax(proposed_basis_probabilities / self.T, dim=-1)
         masked_probabilities = proposed_basis_probabilities * used_measurements_mask
         renormalized_masked_probabilities = masked_probabilities / (masked_probabilities.sum(dim=-1, keepdim=True) + 1e-8)
@@ -470,6 +472,7 @@ class LSTMCELLMeasurementPredictor(nn.Module):
             multilayer_predictor_states.append(new_predictor_states)
 
         proposed_basis_raw = self.predictor_projector(multilayer_predictor_states[-1][0]) # shape (batch, max_num_measurements)
+        proposed_basis_raw = proposed_basis_raw.mean(dim=0, keepdim=True).expand(proposed_basis_raw.shape[0], -1)  # shape (1, num_qubits*4)
         basis_matrices = self.construct_basis_matrices(proposed_basis_raw)
         
         new_basis_as_vector = torch.stack((basis_matrices.real, basis_matrices.imag), dim=-1).view(-1, self.num_qubits*2*2*2)
@@ -593,7 +596,7 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
         proposed_measurement = measurements[:, first_measurement_id].unsqueeze(-1)
         proposed_basis = bases[:, first_measurement_id]
 
-        measurements_memory = torch.zeros_like(measurements)
+        measurements_memory = torch.zeros(measurements.shape[0], self.max_num_measurements, device=measurements.device)
         measurements_memory[torch.arange(measurements.shape[0]), 0] = proposed_measurement.squeeze(-1) # shape (batch, max_num_measurements)
 
         predicted_rho, reconstructor_states = self.lstm_cell.reconstructor_forward(

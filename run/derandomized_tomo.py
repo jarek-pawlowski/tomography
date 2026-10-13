@@ -23,11 +23,21 @@ ms = utils.Measurement(utils.Kwiat, 2)
 #                 np.save(os.path.join(directory, 'm_'+str(i*4+j)+'_'+str(i1*4+j1)), state.reshape((4,4))/2.)
 
 num_states = 10000
-directory = './data/derandomized_train/Xs'
-os.makedirs(directory, exist_ok=True)
-Xs = utils.X_states(std=2.)
-for i in tqdm(range(num_states), "Generating X states"):
-    np.save(os.path.join(directory, str(i)), Xs.generate().reshape((4,4)))
+for i in range(5, 11):
+    num_qubits = i
+    directory = f'./data/{num_qubits}qbits/derandomized_train/Xs'
+    os.makedirs(directory, exist_ok=True)
+    Xs = utils.GeneralizedXStates(std=2.)
+    for i in tqdm(range(num_states), "Generating train X states"):
+        np.save(os.path.join(directory, str(i)), Xs.generate(num_qubits))
+
+
+    directory = f'./data/{num_qubits}qbits/derandomized_test/Xs'
+    os.makedirs(directory, exist_ok=True)
+    Xs = utils.GeneralizedXStates(std=2.)
+    for i in tqdm(range(int(0.1*num_states)), "Generating test X states"):
+        np.save(os.path.join(directory, str(i)), Xs.generate(num_qubits))
+
 
 # directory = './data/derandomized_train/Bell'
 # os.makedirs(directory, exist_ok=True)

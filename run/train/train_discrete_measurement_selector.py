@@ -1,5 +1,7 @@
 import sys
 
+from src.criterions import torch_bures_distance
+
 sys.path.append('./')
 import os
 
@@ -19,10 +21,13 @@ from src.tomography_utils_numpy import Kwiat
     
 def main():
     # load data
-    batch_size = 64
+    batch_size = 128
     num_qubits = 3
-    train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    # train_dataset = MeasurementDataset(root_path='./data/3qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    # test_dataset = MeasurementDataset(root_path='./data/3qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/{num_qubits}qbits/derandomized_train/Xs', num_qubits=num_qubits, mock_label=True)
+    test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/{num_qubits}qbits/derandomized_test/Xs', num_qubits=num_qubits, mock_label=True)
+ 
     # train_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_train/Xs', mock_label=True)
     # test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/derandomized_test/Xs', mock_label=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -32,7 +37,7 @@ def main():
     # pretrained_model_name = 'discrete_lstm_basis_selector_unique_kwiat_basis_cross_entropy_loss_frozen_measurements_1_epoch'
     # pretrained_model_save_path = f'./models/{num_qubits}qbits/{pretrained_model_name}.pt'
 
-    model_name = 'discrete_optimized-v2_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased'
+    model_name = 'xs_discrete_optimized-v2_lstm2_basis_selector_unique_kwiat_basis_cross_entropy_loss_5_noisy_epochs_lr_decreased'
     model_save_path = f'./models/{num_qubits}qbits/{model_name}.pt'
     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
 
@@ -83,6 +88,28 @@ def main():
         write_mode = 'w' if epoch == 1 else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=epoch)
     plot_metrics_from_file(log_path, title='Loss', save_path=f'./plots/{num_qubits}qbits/{model_name}_loss.png')
+
+    bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
+
+    final_criterions = {
+        'test_loss_m': criterion,
+        'bures_distance': bures_distance
+    }
+    final_log_path = f'./logs/{num_qubits}qbits/{model_name}_measurement_dependence.log'
+
+    model.load(model_save_path)
+    with torch.no_grad():
+        best_metrics = test_discrete_measurement_selector(model, device, test_loader, final_criterions, model_params['max_num_measurements'])
+
+    for i in range(model_params['max_num_measurements']):
+        write_mode = 'w' if i == 0 else 'a'
+        metrics_i = {
+            'test_loss': best_metrics['test_loss_m'][f'measurement {i}'],
+            'bures_distance': best_metrics['bures_distance'][f'measurement {i}']
+        }
+        log_metrics_to_file(metrics_i, final_log_path, write_mode=write_mode, xaxis=i + 1, xaxis_name='num_measurements')
+
+
 
 
 if __name__ == '__main__':

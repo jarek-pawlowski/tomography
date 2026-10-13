@@ -120,10 +120,15 @@ class MeasurementDataset(DensityMatrixDataset):
 
 
 class DerandomizedTestMeasurementDataset(Dataset):
-    def __init__(self, root_path: str, mock_label: bool = False) -> None:
+    def __init__(self, root_path: str, num_qubits: int = 2, mock_label: bool = False) -> None:
         self.root_dir = root_path
         self.file_names = sorted(os.listdir(root_path))
-        self.measurement = Measurement(Kwiat, 2)
+        self.num_qubits = num_qubits
+        basis_matrices = [torch.tensor(basis, dtype=torch.complex64) for basis in Kwiat.basis]
+        self.basis_matrices = torch.stack(basis_matrices, dim=0)
+        self.all_measurement_matrices = torch.stack(
+            [torch.stack([self.basis_matrices[i] for i in qubits_ids]) for qubits_ids in product(range(4), repeat=self.num_qubits)]
+        )
         self.mock_label = mock_label
 
     def __len__(self) -> int:
@@ -133,9 +138,8 @@ class DerandomizedTestMeasurementDataset(Dataset):
         filename = self.file_names[idx]
         matrix = self.read_matrix(filename)
         rho = self.convert_numpy_matrix_to_tensor(matrix)
-        matrix = matrix.reshape((2, 2, 2, 2))
-        measurements = self._get_all_measurements(matrix)
-        tensor = torch.from_numpy(measurements).float()
+        measurements = self._get_all_measurements(rho)
+        tensor = measurements.float()
         if self.mock_label:
             return (rho, tensor, 0.)
         return (rho, tensor)
@@ -151,9 +155,11 @@ class DerandomizedTestMeasurementDataset(Dataset):
         tensor = torch.from_numpy(np.stack((matrix_r, matrix_im), axis=0)).float()
         return tensor
 
-    def _get_all_measurements(self, rho_in: np.ndarray) -> np.ndarray:
-        m_all = np.array([[self.measurement.measure(rho_in, [i,j]) for j in [0,1,2,3]] for i in [0,1,2,3]]).flatten()
-        return m_all
+    def _get_all_measurements(self, rho: torch.Tensor) -> torch.Tensor:
+        rho_complex = torch.complex(rho[0], rho[1])
+        rho_complex_expand = rho_complex.unsqueeze(0).expand(self.all_measurement_matrices.shape[0], *rho_complex.shape)
+        measurements = measure_batch_kron(rho_complex_expand, self.all_measurement_matrices)
+        return measurements
 
 
 class FilteredDataset(Dataset):

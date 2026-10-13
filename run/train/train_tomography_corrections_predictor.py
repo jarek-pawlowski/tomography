@@ -28,8 +28,14 @@ except RuntimeError:
     pass
 
     
-def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: DataLoader, test_loader: DataLoader, measurement_subset: set, dir_name: str, model_input_info: str, num_qubits:int = 2, simplifed_training: bool = False):
+def calculate_single_run_metrics(result_queue: Queue, mid: int, measurement_subset: set, dir_name: str, model_input_info: str, num_qubits:int = 2, simplifed_training: bool = False):
     # measurement_subset = random.sample(range(len(Kwiat.basis)**num_qubits), measurement_subset_len)
+    batch_size = 64
+    train_dataset = MeasurementDataset(root_path='./data/5qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = MeasurementDataset(root_path='./data/5qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, prefetch_factor=1)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=1, prefetch_factor=1)
+    
     measurement_subset_len = len(measurement_subset)
 
     if model_input_info == 'full':
@@ -53,7 +59,10 @@ def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: Da
     model_name = f'{model_name}_mid{mid}'
     model_save_path = f'./models/{dir_name}/{model_name}.pt'
 
-    sys.stdout = open(f"./logs/debug/{model_name}.log", 'w')
+    debug_dir = f'./logs/debug/'
+    os.makedirs(debug_dir, exist_ok=True)
+
+    sys.stdout = open(f"{debug_dir}/{model_name}.log", 'w')
 
 
     # model.load(model_save_path)
@@ -93,17 +102,18 @@ def calculate_single_run_metrics(result_queue: Queue, mid: int, train_loader: Da
             regularization_weight=1. if simplifed_training else 0.1,
             use_m2_corrections=False
         )
-        test_metrics = test_tomography_corrections_predictor(
-            model,
-            device,
-            test_loader,
-            criterions,
-            measurements_subset=list(measurement_subset),
-            model_input_info=model_input_info,
-            std_out=sys.stdout,
-            trace_normalization=simplifed_training,
-            use_m2_corrections=False
-        )
+        with torch.no_grad():
+            test_metrics = test_tomography_corrections_predictor(
+                model,
+                device,
+                test_loader,
+                criterions,
+                measurements_subset=list(measurement_subset),
+                model_input_info=model_input_info,
+                std_out=sys.stdout,
+                trace_normalization=simplifed_training,
+                use_m2_corrections=False
+            )
         # matrix_elements_complex_distance = test_metrics.pop('avg_complex_distance')
         if test_metrics['test_loss'] < best_test_loss:
             best_test_loss = test_metrics['test_loss']
@@ -144,9 +154,9 @@ def generate_random_measurements_subsets(num_measurements: int, num_repetitions:
 
 if __name__ == '__main__':
     num_repetitions = 5
-    num_qubits = 4
+    num_qubits = 5
     min_num_measurements = 1
-    max_num_measurements = 256
+    max_num_measurements = 1024
     step = 16
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
     num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
@@ -155,11 +165,7 @@ if __name__ == '__main__':
     log_path = f'./logs/{num_qubits}qbits/tomography_corrections_predictor_hs1024.log'
     simplifed_training = False
 
-    batch_size = 64
-    train_dataset = MeasurementDataset(root_path='./data/4qbits/train/', return_density_matrix=True, num_qubits=num_qubits)
-    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+    batch_size = 128
     queue = Queue()
 
     for i, num_measurements in enumerate(num_measurements_range):
@@ -179,7 +185,7 @@ if __name__ == '__main__':
         queue.put(metrics)
 
         measurement_sets = generate_random_measurements_subsets(num_measurements, actual_num_repetitions)
-        processes = [Process(target=calculate_single_run_metrics, args=(queue, i, train_loader, test_loader, measurement_sets[i], dir_name, model_input_info, num_qubits, simplifed_training)) for i in range(actual_num_repetitions)]
+        processes = [Process(target=calculate_single_run_metrics, args=(queue, i, measurement_sets[i], dir_name, model_input_info, num_qubits, simplifed_training)) for i in range(actual_num_repetitions)]
 
         for process in processes:
             process.start()

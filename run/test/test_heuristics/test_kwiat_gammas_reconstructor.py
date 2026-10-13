@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.datasets import MeasurementDataset
+from src.datasets import MeasurementDataset, DerandomizedTestMeasurementDataset
 from src.model import GammasReconstructor
 from src.criterions import torch_bures_distance, complex_distance_matrix_elements_avg
 from src.log import log_metrics_to_file, plot_metrics_from_file
@@ -67,20 +67,21 @@ def calculate_single_run_metrics(dir_name: str, test_loader: DataLoader, measure
 
 if __name__ == '__main__':
     num_repetitions = 10
-    min_num_measurements = 65
-    max_num_measurements = 256
+    min_num_measurements = 717
+    max_num_measurements = 1024
     step = 4
     num_measurements_range = np.arange(min_num_measurements, max_num_measurements - 2, step)
     num_measurements_range = np.append(num_measurements_range, [max_num_measurements - 1, max_num_measurements])
 
-    num_qubits = 4
+    num_qubits = 5
     inverse = 'pinv'
     enforce_valid_density_matrix = False
-    dir_name = f'./logs/4qbits/density_matrix_reconstructor_from_pinv_gammas/'
-    log_path = f'./logs/4qbits/density_matrix_reconstructor_from_pinv_gammas.log'
+    dir_name = f'./logs/{num_qubits}qbits/xs_density_matrix_reconstructor_from_pinv_gammas/'
+    log_path = f'./logs/{num_qubits}qbits/xs_density_matrix_reconstructor_from_pinv_gammas.log'
 
     batch_size = 64
-    test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    # test_dataset = MeasurementDataset(root_path='./data/4qbits/val/', return_density_matrix=True, num_qubits=num_qubits)
+    test_dataset = DerandomizedTestMeasurementDataset(root_path=f'./data/{num_qubits}qbits/derandomized_test/Xs', num_qubits=num_qubits, mock_label=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, prefetch_factor=4, num_workers=1)
 
     for num_measurements in num_measurements_range:
@@ -132,4 +133,4 @@ if __name__ == '__main__':
 
         write_mode = 'a' if num_measurements == min_num_measurements else 'a'
         log_metrics_to_file(metrics, log_path, write_mode=write_mode, xaxis=num_measurements, xaxis_name='num_measurements')
-    plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/4qbits/density_matrix_reconstructor_from_pinv_gammas_metrics.png', xaxis='num_measurements')
+    # plot_metrics_from_file(log_path, title='Metrics', save_path=f'./plots/{num_qubits}qbits/xs_density_matrix_reconstructor_from_pinv_gammas_metrics.png', xaxis='num_measurements')

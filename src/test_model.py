@@ -740,7 +740,7 @@ def test_combined_lstm(
         for base in Kwiat.basis
     ]
     qubits_bases = [torch.stack(multi_qubit_base) for multi_qubit_base in product(bases, repeat=model.num_qubits)]
-    qubits_bases = torch.stack(qubits_bases).view(model.max_num_measurements, -1).to(device)
+    qubits_bases = torch.stack(qubits_bases).view(4 ** model.num_qubits, -1).to(device)
     qubits_bases = torch.cat((qubits_bases.real, qubits_bases.imag), dim=-1)
 
     metrics = {name: {f'measurement {i}': 0 for i in range(model.max_num_measurements)} for name in criterions.keys()}
