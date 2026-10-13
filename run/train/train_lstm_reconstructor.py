@@ -75,7 +75,7 @@ def calculate_single_run_metrics(
     # train & test model
     log_path = f'./logs/{dir_name}/{model_name}.log'
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    num_epochs = 30
+    num_epochs = 50
     reconstructor_optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
     bures_distance = lambda x, y: torch_bures_distance(x, y, reduction='mean')
@@ -90,7 +90,8 @@ def calculate_single_run_metrics(
         # train_metrics = train_lstm_reconstructor(model, device, train_loader, reconstructor_optimizer, epoch, measurements_order_t, criterion=criterion, log_interval=10, std_out=sys.stdout)
         train_metrics = train_lstm_reconstructor_optimized(model, device, train_loader, reconstructor_optimizer, measurements_order_t, epoch, log_interval=10, std_out=sys.stdout)
         # test_metrics = test_lstm_reconstructor(model, device, test_loader, criterions, measurements_order_t, std_out=sys.stdout)
-        test_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions, std_out=sys.stdout)
+        with torch.no_grad():
+            test_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions, std_out=sys.stdout)
         test_loss_total = test_metrics.pop('test_loss')
         # make test_metrics flat        
         
@@ -112,7 +113,8 @@ def calculate_single_run_metrics(
     }
 
     model.load(model_save_path)
-    best_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions=final_criterions, std_out=sys.stdout)
+    with torch.no_grad():
+        best_metrics = test_lstm_reconstructor_optimized(model, device, test_loader, measurements_order_t, criterions=final_criterions, std_out=sys.stdout)
     test_loss_total = best_metrics.pop('test_loss')
 
     test_loss_t = [

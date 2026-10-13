@@ -589,7 +589,8 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
         bases: torch.Tensor,
         rho: torch.Tensor,
         first_measurement_id: int = 0,
-        criterions: t.Dict[str, t.Callable] = {}
+        criterions: t.Dict[str, t.Callable] = {},
+        return_rhos: bool = False,
     ):
         predictor_states, init_reconstructor_states = self.lstm_cell.initialize_hidden_states(measurements.shape[0], measurements.device)
 
@@ -604,6 +605,9 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
             init_reconstructor_states,
             measurements_memory,
         )
+
+        if return_rhos:
+            all_predicted_rhos = [predicted_rho]
 
         loss = F.mse_loss(predicted_rho, rho)
         
@@ -621,6 +625,9 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
                 measurement_idx=i,
             )
 
+            if return_rhos:
+                all_predicted_rhos.append(predicted_rho)
+
             weight = 1.
             if self.measurements_weights:
                 weight = self.max_num_measurements / (i + 1)
@@ -630,6 +637,8 @@ class CombinedLSTMMeasurementPredictor(nn.Module):
             for name, criterion in criterions.items():
                 metrics[name][f'measurement {i}'] = criterion(predicted_rho, rho)
 
+        if return_rhos:
+            return loss, metrics, torch.stack(all_predicted_rhos, dim=1)
         return loss, metrics
 
     def save(self, path: str):
